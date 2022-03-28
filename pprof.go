@@ -1,23 +1,28 @@
 package go_webserver
 
 import (
+	"github.com/randlabs/go-webserver/middleware"
 	"net/http"
 	httpprof "net/http/pprof"
 	"runtime/pprof"
 	"strings"
 
-	"github.com/valyala/fasthttp"
+	"github.com/randlabs/go-webserver/models"
+	"github.com/randlabs/go-webserver/request"
+	"github.com/valyala/fasthttp/fasthttpadaptor"
 )
 
 // -----------------------------------------------------------------------------
 
 // ProfilerHandlerCheckAccess specifies a callback function that evaluates access to the profiler handlers
-type ProfilerHandlerCheckAccess func(ctx *RequestCtx) bool
+type ProfilerHandlerCheckAccess func(req *request.RequestContext) bool
 
 // -----------------------------------------------------------------------------
 
 // AddProfilerHandlers adds the GO runtime profile handlers to a web server
-func (srv *Server) AddProfilerHandlers(basePath string, accessCheck ProfilerHandlerCheckAccess) {
+func (srv *Server) AddProfilerHandlers(
+	basePath string, accessCheck ProfilerHandlerCheckAccess, middlewares ...middleware.MiddlewareFunc,
+) {
 	if !strings.HasPrefix(basePath, "/") {
 		basePath = "/" + basePath
 	}
@@ -25,44 +30,43 @@ func (srv *Server) AddProfilerHandlers(basePath string, accessCheck ProfilerHand
 		basePath = basePath + "/"
 	}
 
-	srv.Router.GET(basePath, wrapProfilerHandlerFunc(httpprof.Index, accessCheck))
+	srv.GET(basePath, wrapProfilerHandlerFunc(httpprof.Index, accessCheck), middlewares...)
 
 	for _, profile := range pprof.Profiles() {
 		h := httpprof.Handler(profile.Name())
-		srv.Router.GET(basePath+profile.Name(), wrapProfilerHandler(h, accessCheck))
+		srv.GET(basePath+profile.Name(), wrapProfilerHandler(h, accessCheck), middlewares...)
 	}
-	srv.Router.GET(basePath+"cmdline", wrapProfilerHandlerFunc(httpprof.Cmdline, accessCheck))
-	srv.Router.GET(basePath+"profile", wrapProfilerHandlerFunc(httpprof.Profile, accessCheck))
-	srv.Router.GET(basePath+"symbol", wrapProfilerHandlerFunc(httpprof.Symbol, accessCheck))
-	srv.Router.GET(basePath+"trace", wrapProfilerHandlerFunc(httpprof.Trace, accessCheck))
+	srv.GET(basePath+"cmdline", wrapProfilerHandlerFunc(httpprof.Cmdline, accessCheck), middlewares...)
+	srv.GET(basePath+"profile", wrapProfilerHandlerFunc(httpprof.Profile, accessCheck), middlewares...)
+	srv.GET(basePath+"symbol", wrapProfilerHandlerFunc(httpprof.Symbol, accessCheck), middlewares...)
+	srv.GET(basePath+"trace", wrapProfilerHandlerFunc(httpprof.Trace, accessCheck), middlewares...)
 }
 
 // -----------------------------------------------------------------------------
 // Private functions
 
-func wrapProfilerHandler(handler http.Handler, accessCheck ProfilerHandlerCheckAccess) fasthttp.RequestHandler {
-	return wrapProfilerFastHandler(FastHttpHandlerFromHttpHandler(handler), accessCheck)
-}
+func wrapProfilerHandler(handler http.Handler, accessCheck ProfilerHandlerCheckAccess) models.HandlerFunc {
+	fasthttpHandler := fasthttpadaptor.NewFastHTTPHandler(handler)
 
-func wrapProfilerHandlerFunc(handler http.HandlerFunc, accessCheck ProfilerHandlerCheckAccess) fasthttp.RequestHandler {
-	return wrapProfilerFastHandler(FastHttpHandlerFromHttpHandlerFunc(handler), accessCheck)
-}
-
-func wrapProfilerFastHandler(handler fasthttp.RequestHandler, accessCheck ProfilerHandlerCheckAccess) fasthttp.RequestHandler {
-	wrapper := func(ctx *RequestCtx) {
+	return func(req *request.RequestContext) error {
 		// Disable cache for this requests
-		EnableCORS(ctx)
-		DisableCache(ctx)
+		//		EnableCORS(ctx)
+		//		DisableCache(ctx)
 
 		// Check access
-		if accessCheck != nil && (!accessCheck(ctx)) {
+		if accessCheck == nil || accessCheck(req) {
+			// Call the handler
+			req.CallFastHttpHandler(fasthttpHandler)
+		} else {
 			// Deny access
-			SendAccessDenied(ctx, "403 forbidden")
-			return
+			req.AccessDenied("403 forbidden")
 		}
 
-		// Call the handler
-		handler(ctx)
+		// Done
+		return nil
 	}
-	return wrapper
+}
+
+func wrapProfilerHandlerFunc(handler http.HandlerFunc, accessCheck ProfilerHandlerCheckAccess) models.HandlerFunc {
+	return wrapProfilerHandler(handler, accessCheck)
 }

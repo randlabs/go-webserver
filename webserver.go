@@ -4,41 +4,43 @@ import (
 	"crypto/tls"
 	"errors"
 	"net"
+	"path/filepath"
 	"runtime"
 	"strconv"
+	"strings"
 	"sync/atomic"
 	"time"
 
-	"github.com/buaazp/fasthttprouter"
+	"github.com/fasthttp/router"
 	"github.com/randlabs/go-webserver/listener"
+	"github.com/randlabs/go-webserver/middleware"
+	"github.com/randlabs/go-webserver/models"
+	"github.com/randlabs/go-webserver/request"
 	"github.com/valyala/fasthttp"
 )
 
 // -----------------------------------------------------------------------------
 
-// RequestCtx ...
-type RequestCtx = fasthttp.RequestCtx
-
-// Router ...
-type Router = fasthttprouter.Router
-
-// Cookie ...
-type Cookie = fasthttp.Cookie
-
-// -----------------------------------------------------------------------------
-
+// Server is the main server object
 type Server struct {
 	fastserver             fasthttp.Server
-	Router                 *fasthttprouter.Router
+	router                 *router.Router
 	bindAddress            net.IP
 	bindPort               uint16
-	listenErrorCallback    ListenErrorCallback
+	listenErrorHandler     ListenErrorHandler
+	requestErrorHandler    RequestErrorHandler
+	middlewares            []middleware.MiddlewareFunc
 	state                  int32
 	startShutdownSignal    chan struct{}
 	shutdownCompleteSignal chan struct{}
+	requestPool            *request.RequestContextPool
 }
 
+// Options specifies the server creation options.
 type Options struct {
+	// Server name to use when sending response headers. Defaults to 'go-webserver'.
+	Name string
+
 	// Address is the bind address to attach the server listener.
 	Address string
 
@@ -69,14 +71,42 @@ type Options struct {
 	EnableCompression bool
 
 	// A callback to call if an error is encountered.
-	ListenErrorCallback ListenErrorCallback
+	ListenErrorHandler ListenErrorHandler
+
+	// A callback to handle errors in requests.
+	RequestErrorHandler RequestErrorHandler
+
+	// A custom handler for 404 errors
+	NotFoundHandler models.HandlerFunc
 
 	// TLSConfig optionally provides a TLS configuration for use.
 	TLSConfig *tls.Config
 }
 
-// ListenErrorCallback is a callback to call if an error is encountered.
-type ListenErrorCallback func(srv *Server, err error)
+// ListenErrorHandler is a callback to call if an error is encountered in the network listener.
+type ListenErrorHandler func(srv *Server, err error)
+
+// RequestErrorHandler is a callback to call if an error is encountered while processing a request.
+type RequestErrorHandler func(req *request.RequestContext, err error)
+
+// ServerFilesOptions sets the parameters to use in a ServeFiles call
+type ServerFilesOptions struct {
+	// Base directory where public files are located
+	RootDirectory string
+
+	// If a path with no file is requested (like '/'), by default the file server will attempt to locate
+	// 'index.html' and 'index.htm' files and serve them if available.
+	DisableDefaultIndexPages bool
+
+	// Enable Brotli compression if available or default to gzip
+	EnableBrotli bool
+
+	// Accept client byte range requests
+	AcceptByteRange bool
+
+	// Custom file not found handler. Defaults to the server NotFound handler.
+	NotFoundHandler models.HandlerFunc
+}
 
 // -----------------------------------------------------------------------------
 
@@ -85,6 +115,14 @@ const (
 	DefaultWriteTimeout       = 10 * time.Second
 	DefaultMaxRequestsPerConn = 8
 	DefaultMaxRequestBodySize = 4 * 1048576 // 4MB
+)
+
+// -----------------------------------------------------------------------------
+
+const (
+	defaultServerName = "go-webserver"
+
+	serveFilesSuffix = "{filepath:*}"
 
 	stateNotStarted = 1
 	stateStarting   = 2
@@ -92,11 +130,6 @@ const (
 	stateStopping   = 4
 	stateStopped    = 3
 )
-
-// -----------------------------------------------------------------------------
-
-var strContentType = []byte("Content-Type")
-var strApplicationJSON = []byte("application/json")
 
 // -----------------------------------------------------------------------------
 
@@ -143,32 +176,66 @@ func Create(options Options) (*Server, error) {
 		maxRequestBodySize = DefaultMaxRequestBodySize
 	}
 
+	parsedBindAddress := net.ParseIP(options.Address)
+	if parsedBindAddress == nil {
+		return nil, errors.New("invalid server bind address")
+	}
+	if p4 := parsedBindAddress.To4(); len(p4) == net.IPv4len {
+		parsedBindAddress = p4
+	}
+
 	// Create a new server container
 	srv := &Server{
-		Router:                 fasthttprouter.New(),
-		bindAddress:            net.ParseIP(options.Address),
+		router:                 router.New(),
+		bindAddress:            parsedBindAddress,
 		bindPort:               options.Port,
-		listenErrorCallback:    options.ListenErrorCallback,
+		listenErrorHandler:     options.ListenErrorHandler,
+		requestErrorHandler:    options.RequestErrorHandler,
+		middlewares:            make([]middleware.MiddlewareFunc, 0),
 		state:                  stateNotStarted,
 		startShutdownSignal:    make(chan struct{}, 1),
 		shutdownCompleteSignal: make(chan struct{}, 1),
-	}
-	if srv.bindAddress == nil {
-		return nil, errors.New("invalid server bind address")
-	}
-	if p4 := srv.bindAddress.To4(); len(p4) == net.IPv4len {
-		srv.bindAddress = p4
+		requestPool:            request.NewRequestContextPool(),
 	}
 
-	// Setup compression
-	h := srv.Router.Handler
+	// Set default request error handler if none was specified.
+	if srv.requestErrorHandler == nil {
+		srv.requestErrorHandler = srv.defaultRequestErrorHandler
+	}
+
+	// Set the NotFound handler.
+	if options.NotFoundHandler != nil {
+		srv.router.NotFound = srv.createEndpointHandler(options.NotFoundHandler)
+	} else {
+		srv.router.NotFound = func(ctx *fasthttp.RequestCtx) {
+			ctx.Error(fasthttp.StatusMessage(fasthttp.StatusNotFound), fasthttp.StatusNotFound)
+		}
+	}
+
+	// Override some router settings
+	srv.router.RedirectTrailingSlash = true
+	srv.router.RedirectFixedPath = true
+	srv.router.HandleMethodNotAllowed = true
+	srv.router.HandleOPTIONS = false
+
+	// Check server name
+	serverName := options.Name
+	if len(serverName) == 0 {
+		serverName = defaultServerName
+	}
+
+	// Get the primary handler for the server
+	h := srv.router.Handler
+
+	// If compression is enabled, then wrap it with the one that handles compression.
 	if options.EnableCompression {
 		h = fasthttp.CompressHandler(h)
 	}
 
 	// Create FastHTTP server
 	srv.fastserver = fasthttp.Server{
-		Handler:            h,
+		Name:               serverName,
+		Handler:            srv.createMasterHandler(h),
 		ReadTimeout:        readTimeout,
 		WriteTimeout:       writeTimeout,
 		MaxConnsPerIP:      maxConnsPerIP,
@@ -177,6 +244,7 @@ func Create(options Options) (*Server, error) {
 		MaxRequestBodySize: maxRequestBodySize,
 		TLSConfig:          options.TLSConfig,
 		Logger:             newLoggerBridge(srv.logCallback),
+		CloseOnShutdown:    true,
 	}
 
 	// Done
@@ -201,6 +269,7 @@ func (srv *Server) Start() error {
 		address = "[" + address + "]"
 	}
 
+	// Create the graceful shutdown listener
 	ln, err := createListener(network, address+":"+strconv.Itoa(int(srv.bindPort)))
 	if err != nil {
 		atomic.StoreInt32(&srv.state, stateNotStarted)
@@ -231,8 +300,8 @@ func (srv *Server) Start() error {
 			atomic.StoreInt32(&srv.state, stateStopping)
 
 			// Web server is no longer able to accept more connections
-			if srv.listenErrorCallback != nil {
-				srv.listenErrorCallback(srv, errCh)
+			if srv.listenErrorHandler != nil {
+				srv.listenErrorHandler(srv, errCh)
 			}
 
 		// handle termination signal
@@ -263,9 +332,101 @@ func (srv *Server) Stop() {
 	}
 }
 
-// -----------------------------------------------------------------------------
-// Private methods
+// Use adds a middleware that will be executed as part of the request handler
+func (srv *Server) Use(middleware middleware.MiddlewareFunc) {
+	srv.middlewares = append(srv.middlewares, middleware)
+}
 
-func (srv *Server) logCallback(format string, args ...interface{}) {
-	// Nothing for now
+// GET adds a GET handler for the specified route
+func (srv *Server) GET(path string, handler models.HandlerFunc, middlewares ...middleware.MiddlewareFunc) {
+	srv.router.Handle("GET", path, srv.createEndpointHandler(handler, middlewares...))
+}
+
+// HEAD adds a HEAD handler for the specified route
+func (srv *Server) HEAD(path string, handler models.HandlerFunc, middlewares ...middleware.MiddlewareFunc) {
+	srv.router.Handle("HEAD", path, srv.createEndpointHandler(handler, middlewares...))
+}
+
+// OPTIONS adds a OPTIONS handler for the specified route
+func (srv *Server) OPTIONS(path string, handler models.HandlerFunc, middlewares ...middleware.MiddlewareFunc) {
+	srv.router.Handle("OPTIONS", path, srv.createEndpointHandler(handler, middlewares...))
+}
+
+// POST adds a POST handler for the specified route
+func (srv *Server) POST(path string, handler models.HandlerFunc, middlewares ...middleware.MiddlewareFunc) {
+	srv.router.Handle("POST", path, srv.createEndpointHandler(handler, middlewares...))
+}
+
+// PUT adds a PUT handler for the specified route
+func (srv *Server) PUT(path string, handler models.HandlerFunc, middlewares ...middleware.MiddlewareFunc) {
+	srv.router.Handle("PUT", path, srv.createEndpointHandler(handler, middlewares...))
+}
+
+// PATCH adds a PATCH handler for the specified route
+func (srv *Server) PATCH(path string, handler models.HandlerFunc, middlewares ...middleware.MiddlewareFunc) {
+	srv.router.Handle("PATCH", path, srv.createEndpointHandler(handler, middlewares...))
+}
+
+// DELETE adds a DELETE handler for the specified route
+func (srv *Server) DELETE(path string, handler models.HandlerFunc, middlewares ...middleware.MiddlewareFunc) {
+	srv.router.Handle("DELETE", path, srv.createEndpointHandler(handler, middlewares...))
+}
+
+// ServeFiles adds custom filesystem handler for the specified route
+func (srv *Server) ServeFiles(path string, options ServerFilesOptions, middlewares ...middleware.MiddlewareFunc) error {
+
+	// Check some options
+	if !filepath.IsAbs(options.RootDirectory) {
+		return errors.New("absolute path must be provided")
+	}
+
+	if !strings.HasSuffix(path, "/") {
+		path += "/"
+	}
+	path += serveFilesSuffix
+
+	indexNames := make([]string, 0)
+	if !options.DisableDefaultIndexPages {
+		indexNames = append(indexNames, "index.html")
+		indexNames = append(indexNames, "index.htm")
+	}
+	var pathNotFoundHandler fasthttp.RequestHandler
+	if options.NotFoundHandler != nil {
+		pathNotFoundHandler = srv.createEndpointHandler(options.NotFoundHandler)
+	} else {
+		pathNotFoundHandler = srv.router.NotFound
+	}
+
+	// Create filesystem
+	fs := fasthttp.FS{
+		Root:               options.RootDirectory,
+		IndexNames:         indexNames,
+		GenerateIndexPages: !options.DisableDefaultIndexPages,
+		CompressBrotli:     !options.EnableBrotli,
+		AcceptByteRange:    options.AcceptByteRange,
+		PathNotFound:       pathNotFoundHandler,
+	}
+
+	// If the url path contains sublevels, we must remove them in order to avoid mapping them into the filesystem
+	// I.e.: If base path is '/foo/bar' and root-dir is '/tmp/public' is request to '/foo/bar/index.html' would
+	//       become '/tmp/public/foo/bar/index.html' instead of '/tmp/public/index.html'.
+	toStrip := strings.Count(path[:len(path)-len(serveFilesSuffix)-1], "/") // Exclude the last subpath fragment
+	if toStrip > 0 {
+		fs.PathRewrite = fasthttp.NewPathSlashesStripper(toStrip)
+	}
+
+	// Create the FastHttp handler for the file system
+	fsHandler := fs.NewRequestHandler()
+
+	// Now our wrapper
+	handler := func(req *request.RequestContext) error {
+		req.CallFastHttpHandler(fsHandler)
+		return nil
+	}
+
+	// And add to router
+	srv.router.Handle("GET", path, srv.createEndpointHandler(handler, middlewares...))
+
+	// Done
+	return nil
 }
