@@ -14,7 +14,13 @@ import (
 	"syscall"
 
 	webserver "github.com/randlabs/go-webserver"
+	"github.com/randlabs/go-webserver/middleware"
+	"github.com/randlabs/go-webserver/request"
 )
+
+type testApiOutput struct {
+	Status  string `json:"status"`
+}
 
 func main() {
 	// Options struct has all the documentation
@@ -28,8 +34,11 @@ func main() {
 		return
 	}
 
-	// Setup routes
-	srv.Router.GET("/test", getTestApi)
+	// Add some middlewares
+	srv.Use(middleware.DefaultCORS())
+
+	// Setup a route
+	srv.GET("/test", getTestApi)
 
 	// Start server
 	err = srv.Start()
@@ -50,20 +59,16 @@ func main() {
 	srv.Stop()
 }
 
-type testApiOutput struct {
-	Status  string `json:"status"`
-}
-
-func getTestApi(ctx *webserver.RequestCtx) {
-	webserver.EnableCORS(ctx)
-	webserver.DisableCache(ctx)
-
+func getTestApi(req *request.RequestContext) error {
 	// Prepare output
-	output := testApiOutput{}
-	output.Status = "all systems operational"
+	output := testApiOutput{
+		Status: "all systems operational",
+    }
 
 	// Encode and send output
-	webserver.SendJSON(ctx, output)
+	req.WriteJSON(output)
+	req.Success()
+	return nil
 }
 ```
 
