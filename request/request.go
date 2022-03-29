@@ -50,7 +50,7 @@ func (req *RequestContext) AddResponseHeader(key string, value string) {
 	req.ctx.Response.Header.Add(key, value)
 }
 
-func (req *RequestContext) SendSuccess() {
+func (req *RequestContext) Success() {
 	req.ctx.Response.SetStatusCode(fasthttp.StatusOK)
 }
 
@@ -70,7 +70,7 @@ func (req *RequestContext) InternalServerError(msg string) {
 	req.sendError(fasthttp.StatusInternalServerError, msg)
 }
 
-func (req *RequestContext) SendJSON(obj interface{}) {
+func (req *RequestContext) WriteJSON(obj interface{}) {
 	req.ctx.Response.Header.SetCanonical(strContentType, strApplicationJSON)
 	req.ctx.Response.SetStatusCode(fasthttp.StatusOK)
 

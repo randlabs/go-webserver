@@ -76,33 +76,40 @@ func (req *RequestContext) {{$method.Name}}({{processParams $method.InTypes "in"
 	v := reflect.ValueOf(reqCtx)
 	t := reflect.TypeOf(reqCtx)
 
+	// But skip the following
+
+	// Iterate through all public methods
 	for methodIdx := 0; methodIdx < v.NumMethod(); methodIdx++ {
 		method := t.Method(methodIdx)
 		methodType := method.Type
 
 		// Skip some public methods
-		if method.Name == "NotFound" || method.Name == "NotModified" {
-			continue
-		}
+		switch method.Name {
+		case "NotFound":
+		case "NotModified":
+		case "Success":
 
-		tmplMethod := Method{
-			Name:      method.Name,
-			InTypes:   make([]string, 0),
-			OutTypes:  make([]string, 0),
-		}
-
-		// We are assuming the first parameter is the pointer to 'fasthttp.RequestCtx'
-		if methodType.NumIn() >= 2 {
-			for idx := 1; idx < methodType.NumIn(); idx++ {
-				tmplMethod.InTypes = append(tmplMethod.InTypes, methodType.In(idx).String())
+		default:
+			// Add this method
+			tmplMethod := Method{
+				Name:     method.Name,
+				InTypes:  make([]string, 0),
+				OutTypes: make([]string, 0),
 			}
-		}
 
-		for idx := 0; idx < methodType.NumOut(); idx++ {
-			tmplMethod.OutTypes = append(tmplMethod.OutTypes, methodType.Out(idx).String())
-		}
+			// We are assuming the first parameter is the pointer to 'fasthttp.RequestCtx'
+			if methodType.NumIn() >= 2 {
+				for idx := 1; idx < methodType.NumIn(); idx++ {
+					tmplMethod.InTypes = append(tmplMethod.InTypes, methodType.In(idx).String())
+				}
+			}
 
-		tmplConfig.Methods = append(tmplConfig.Methods, tmplMethod)
+			for idx := 0; idx < methodType.NumOut(); idx++ {
+				tmplMethod.OutTypes = append(tmplMethod.OutTypes, methodType.Out(idx).String())
+			}
+
+			tmplConfig.Methods = append(tmplConfig.Methods, tmplMethod)
+		}
 	}
 
 	// Generate output

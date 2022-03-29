@@ -334,11 +334,6 @@ func (req *RequestContext) String() (out1 string) {
 	return
 }
 
-func (req *RequestContext) Success(in1 string, in2 []uint8) {
-	req.ctx.Success(in1, in2)
-	return
-}
-
 func (req *RequestContext) SuccessString(in1 string, in2 string) {
 	req.ctx.SuccessString(in1, in2)
 	return

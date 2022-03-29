@@ -1,12 +1,12 @@
 package go_webserver
 
 import (
-	"github.com/randlabs/go-webserver/middleware"
 	"net/http"
 	httpprof "net/http/pprof"
 	"runtime/pprof"
 	"strings"
 
+	"github.com/randlabs/go-webserver/middleware"
 	"github.com/randlabs/go-webserver/models"
 	"github.com/randlabs/go-webserver/request"
 	"github.com/valyala/fasthttp/fasthttpadaptor"
@@ -14,14 +14,14 @@ import (
 
 // -----------------------------------------------------------------------------
 
-// ProfilerHandlerCheckAccess specifies a callback function that evaluates access to the profiler handlers
-type ProfilerHandlerCheckAccess func(req *request.RequestContext) bool
+// DebugProfilerAccessCheck specifies a callback function that evaluates access to the profiler handlers
+type DebugProfilerAccessCheck func(req *request.RequestContext) bool
 
 // -----------------------------------------------------------------------------
 
-// AddProfilerHandlers adds the GO runtime profile handlers to a web server
-func (srv *Server) AddProfilerHandlers(
-	basePath string, accessCheck ProfilerHandlerCheckAccess, middlewares ...middleware.MiddlewareFunc,
+// ServeDebugProfiler adds the GO runtime profile handlers to a web server
+func (srv *Server) ServeDebugProfiler(
+	basePath string, accessCheck DebugProfilerAccessCheck, middlewares ...middleware.MiddlewareFunc,
 ) {
 	if !strings.HasPrefix(basePath, "/") {
 		basePath = "/" + basePath
@@ -45,14 +45,10 @@ func (srv *Server) AddProfilerHandlers(
 // -----------------------------------------------------------------------------
 // Private functions
 
-func wrapProfilerHandler(handler http.Handler, accessCheck ProfilerHandlerCheckAccess) models.HandlerFunc {
+func wrapProfilerHandler(handler http.Handler, accessCheck DebugProfilerAccessCheck) models.HandlerFunc {
 	fasthttpHandler := fasthttpadaptor.NewFastHTTPHandler(handler)
 
 	return func(req *request.RequestContext) error {
-		// Disable cache for this requests
-		//		EnableCORS(ctx)
-		//		DisableCache(ctx)
-
 		// Check access
 		if accessCheck == nil || accessCheck(req) {
 			// Call the handler
@@ -67,6 +63,6 @@ func wrapProfilerHandler(handler http.Handler, accessCheck ProfilerHandlerCheckA
 	}
 }
 
-func wrapProfilerHandlerFunc(handler http.HandlerFunc, accessCheck ProfilerHandlerCheckAccess) models.HandlerFunc {
+func wrapProfilerHandlerFunc(handler http.HandlerFunc, accessCheck DebugProfilerAccessCheck) models.HandlerFunc {
 	return wrapProfilerHandler(handler, accessCheck)
 }

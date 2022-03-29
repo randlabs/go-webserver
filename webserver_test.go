@@ -2,8 +2,6 @@ package go_webserver
 
 import (
 	"fmt"
-	"github.com/randlabs/go-webserver/middleware"
-	"github.com/randlabs/go-webserver/request"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -13,7 +11,16 @@ import (
 	"syscall"
 	"testing"
 	"time"
+
+	"github.com/randlabs/go-webserver/middleware"
+	"github.com/randlabs/go-webserver/request"
 )
+
+// -----------------------------------------------------------------------------
+
+type versionApiOutput struct {
+	Version string `json:"version"`
+}
 
 // -----------------------------------------------------------------------------
 
@@ -53,7 +60,7 @@ func TestWebServer(t *testing.T) {
 	srv.POST("/api/version", renderApiVersion)
 
 	// Add also profile output
-	srv.AddProfilerHandlers("/debug/", nil)
+	srv.ServeDebugProfiler("/debug/", nil)
 
 	// Start server
 	err = srv.Start()
@@ -64,7 +71,6 @@ func TestWebServer(t *testing.T) {
 
 	// Open default browser
 	openBrowser("http://" + srvOpts.Address + ":" + strconv.Itoa(int(srvOpts.Port)) + "/")
-	//openBrowser("http://" + srvOpts.Address + ":" + strconv.Itoa(int(srvOpts.Port)) + "/debug/")
 
 	// Wait for CTRL+C
 	fmt.Println("Server running. Press CTRL+C to stop.")
@@ -95,6 +101,10 @@ func openBrowser(url string) {
 }
 
 func renderApiVersion(req *request.RequestContext) error {
-	req.WriteString(`{ "version": "1.0.0" }`)
+	output := versionApiOutput{
+		Version: "1.0.0",
+	}
+	req.WriteJSON(output)
+	req.Success()
 	return nil
 }
