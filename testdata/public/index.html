@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Go-WebServer basic example</title>
+<link href="css/bootstrap-5.1.3.min.css" rel="stylesheet">
+<script src="js/jquery-3.6.0.min.js"></script>
+<script src="js/bootstrap-5.1.3.min.js"></script>
+<style>
+iframe {
+    display: block;
+    border: none;
+    height: 100vh;
+    width: 100vw;
+}
+</style>
+</head>
+<body>
+<nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+    <span class="navbar-brand px-2">GO-WebServer</span>
+    <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+        <span class="navbar-toggler-icon"></span>
+    </button>
+    <div class="collapse navbar-collapse" id="navbarNav">
+        <ul class="navbar-nav">
+            <li class="nav-item">
+                <a id="demoAJAX" class="nav-link" href="javascript:void(0);">AJAX</a>
+            </li>
+            <li class="nav-item">
+                <a id="demoPROFILER" class="nav-link" href="javascript:void(0);">Profiler</a>
+            </li>
+        </ul>
+    </div>
+</nav>
+<div class="container-fluid">
+    <iframe id="frameContainer" src="" width="100%" height="800px"></iframe>
+</div>
+<script>
+$(function () {
+    $("#demoAJAX").on('click', function () {
+        $("#frameContainer").attr("src", window.location.origin + "/ajax.html");
+    });
+    $("#demoPROFILER").on('click', function () {
+        $("#frameContainer").attr("src", window.location.origin + "/debug");
+    });
+});
+</script>
+</body>
+</html>

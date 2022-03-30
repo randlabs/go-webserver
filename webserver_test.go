@@ -7,13 +7,25 @@ import (
 	"os/signal"
 	"runtime"
 	"strconv"
+	"strings"
 	"syscall"
 	"testing"
+	"time"
+
+	"github.com/randlabs/go-webserver/middleware"
+	"github.com/randlabs/go-webserver/request"
 )
 
 // -----------------------------------------------------------------------------
 
+type versionApiOutput struct {
+	Version string `json:"version"`
+}
+
+// -----------------------------------------------------------------------------
+
 func TestWebServer(t *testing.T) {
+	//Create server
 	srvOpts := Options{
 		Address: "127.0.0.1",
 		Port:    3000,
@@ -24,7 +36,31 @@ func TestWebServer(t *testing.T) {
 		return
 	}
 
-	srv.AddProfilerHandlers("/debug/", nil)
+	// Add some middlewares
+	srv.Use(middleware.DefaultCORS())
+	srv.Use(middleware.DisableCacheControl())
+
+	// Add public files to server
+	var workDir string
+
+	workDir, err = os.Getwd()
+	if err != nil {
+		t.Errorf("unable to get current directory [%v]", err)
+		return
+	}
+	if !strings.HasSuffix(workDir, string(os.PathSeparator)) {
+		workDir += string(os.PathSeparator)
+	}
+
+	srv.ServeFiles("/", ServerFilesOptions{
+		RootDirectory: workDir + "testdata/public",
+	})
+
+	// Add a dummy api function
+	srv.POST("/api/version", renderApiVersion)
+
+	// Add also profile output
+	srv.ServeDebugProfiler("/debug/", nil)
 
 	// Start server
 	err = srv.Start()
@@ -34,14 +70,17 @@ func TestWebServer(t *testing.T) {
 	}
 
 	// Open default browser
-	openBrowser("http://" + srvOpts.Address + ":" + strconv.Itoa(int(srvOpts.Port)) + "/debug/")
-
-	fmt.Println("Server running. Press CTRL+C to stop.")
+	openBrowser("http://" + srvOpts.Address + ":" + strconv.Itoa(int(srvOpts.Port)) + "/")
 
 	// Wait for CTRL+C
+	fmt.Println("Server running. Press CTRL+C to stop.")
+
 	c := make(chan os.Signal, 2)
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
-	<-c
+	select {
+	case <-c:
+	case <-time.After(5 * time.Minute):
+	}
 	fmt.Println("Shutting down...")
 
 	// Stop web server
@@ -59,4 +98,13 @@ func openBrowser(url string) {
 	case "darwin":
 		_ = exec.Command("open", url).Start()
 	}
+}
+
+func renderApiVersion(req *request.RequestContext) error {
+	output := versionApiOutput{
+		Version: "1.0.0",
+	}
+	req.WriteJSON(output)
+	req.Success()
+	return nil
 }

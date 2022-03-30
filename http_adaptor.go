@@ -3,17 +3,21 @@ package go_webserver
 import (
 	"net/http"
 
-	"github.com/valyala/fasthttp"
+	"github.com/randlabs/go-webserver/models"
+	"github.com/randlabs/go-webserver/request"
 	"github.com/valyala/fasthttp/fasthttpadaptor"
 )
 
 // -----------------------------------------------------------------------------
 
-func FastHttpHandlerFromHttpHandler(handler http.Handler) fasthttp.RequestHandler {
-	// Create handler
-	return fasthttpadaptor.NewFastHTTPHandler(handler)
+func HandlerFromHttpHandler(handler http.Handler) models.HandlerFunc {
+	fasthttpHandler := fasthttpadaptor.NewFastHTTPHandler(handler)
+	return func(req *request.RequestContext) error {
+		req.CallFastHttpHandler(fasthttpHandler)
+		return nil
+	}
 }
 
-func FastHttpHandlerFromHttpHandlerFunc(f http.HandlerFunc) fasthttp.RequestHandler {
-	return FastHttpHandlerFromHttpHandler(f)
+func HandlerFromHttpHandlerFunc(f http.HandlerFunc) models.HandlerFunc {
+	return HandlerFromHttpHandler(f)
 }
