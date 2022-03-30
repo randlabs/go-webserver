@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/randlabs/go-webserver/models"
+	webserver "github.com/randlabs/go-webserver"
 	"github.com/randlabs/go-webserver/request"
 )
 
@@ -43,11 +43,11 @@ type CORSOptions struct {
 
 // -----------------------------------------------------------------------------
 
-func DefaultCORS() MiddlewareFunc {
+func DefaultCORS() webserver.MiddlewareFunc {
 	return NewCORS(CORSOptions{})
 }
 
-func NewCORS(opts CORSOptions) MiddlewareFunc {
+func NewCORS(opts CORSOptions) webserver.MiddlewareFunc {
 	// Parse options
 	if opts.SkipCallback == nil {
 		opts.SkipCallback = defaultSkip
@@ -90,7 +90,7 @@ func NewCORS(opts CORSOptions) MiddlewareFunc {
 	exposeHeaders := strings.Join(opts.ExposeHeaders, ",")
 	maxAge := strconv.Itoa(opts.MaxAge)
 
-	return func(next models.HandlerFunc) models.HandlerFunc {
+	return func(next webserver.HandlerFunc) webserver.HandlerFunc {
 		return func(req *request.RequestContext) error {
 			if opts.SkipCallback(req) {
 				return next(req)

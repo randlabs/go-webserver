@@ -2,44 +2,45 @@ package middleware
 
 import (
 	"fmt"
-	"github.com/randlabs/go-webserver/models"
-	"github.com/randlabs/go-webserver/request"
 	"strings"
+
+	webserver "github.com/randlabs/go-webserver"
+	"github.com/randlabs/go-webserver/request"
 )
 
 // -----------------------------------------------------------------------------
 
 type CacheControlOptions struct {
-	Public                         bool
-	Private                        bool
-	NoCache                        bool
-	NoStore                        bool
-	NoTransform                    bool
-	MustRevalidate                 bool
-	ProxyRevalidate                bool
-	MaxAgeInSeconds                *uint32
-	SharedMaxAgeInSeconds          *uint32
-	StaleWhileRevalidateInSeconds  *uint32
-	StaleIfErrorInSeconds          *uint32
+	Public                        bool
+	Private                       bool
+	NoCache                       bool
+	NoStore                       bool
+	NoTransform                   bool
+	MustRevalidate                bool
+	ProxyRevalidate               bool
+	MaxAgeInSeconds               *uint32
+	SharedMaxAgeInSeconds         *uint32
+	StaleWhileRevalidateInSeconds *uint32
+	StaleIfErrorInSeconds         *uint32
 }
 
 // -----------------------------------------------------------------------------
 
-func DisableCacheControl() MiddlewareFunc {
+func DisableCacheControl() webserver.MiddlewareFunc {
 	var zero uint32
 
 	return NewCacheControl(CacheControlOptions{
-		Private:                true,
-		NoCache:                true,
-		NoStore:                true,
-		MustRevalidate:         true,
-		ProxyRevalidate:        true,
-		MaxAgeInSeconds:        &zero,
-		SharedMaxAgeInSeconds:  &zero,
+		Private:               true,
+		NoCache:               true,
+		NoStore:               true,
+		MustRevalidate:        true,
+		ProxyRevalidate:       true,
+		MaxAgeInSeconds:       &zero,
+		SharedMaxAgeInSeconds: &zero,
 	})
 }
 
-func NewCacheControl(opts CacheControlOptions) MiddlewareFunc {
+func NewCacheControl(opts CacheControlOptions) webserver.MiddlewareFunc {
 	cacheValue := make([]string, 0)
 
 	if opts.Public {
@@ -81,7 +82,7 @@ func NewCacheControl(opts CacheControlOptions) MiddlewareFunc {
 
 	finalCacheValue := strings.Join(cacheValue, ",")
 
-	return func(next models.HandlerFunc) models.HandlerFunc {
+	return func(next webserver.HandlerFunc) webserver.HandlerFunc {
 		return func(req *request.RequestContext) error {
 			// Set cache control header
 			req.SetResponseHeader("Cache-Control", finalCacheValue)

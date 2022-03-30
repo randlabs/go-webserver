@@ -3,8 +3,6 @@ package go_webserver
 import (
 	"net/http"
 
-	"github.com/randlabs/go-webserver/middleware"
-	"github.com/randlabs/go-webserver/models"
 	"github.com/randlabs/go-webserver/request"
 	"github.com/valyala/fasthttp"
 )
@@ -32,8 +30,8 @@ func (srv *Server) createMasterHandler(masterHandler fasthttp.RequestHandler) fa
 	}
 
 	// Build the recursive function for server-wide middlewares
-	var f func(idx int) models.HandlerFunc
-	f = func(idx int) models.HandlerFunc {
+	var f func(idx int) HandlerFunc
+	f = func(idx int) HandlerFunc {
 		if idx < len(srv.middlewares) {
 			return srv.middlewares[idx](f(idx + 1))
 		}
@@ -65,12 +63,10 @@ func (srv *Server) createMasterHandler(masterHandler fasthttp.RequestHandler) fa
 	}
 }
 
-func (srv *Server) createEndpointHandler(
-	epHandler models.HandlerFunc, middlewares ...middleware.MiddlewareFunc,
-) fasthttp.RequestHandler {
+func (srv *Server) createEndpointHandler(epHandler HandlerFunc, middlewares ...MiddlewareFunc) fasthttp.RequestHandler {
 	// Build the recursive function for endpoint middlewares
-	var f func(idx int) models.HandlerFunc
-	f = func(idx int) models.HandlerFunc {
+	var f func(idx int) HandlerFunc
+	f = func(idx int) HandlerFunc {
 		if idx < len(middlewares) {
 			return middlewares[idx](f(idx + 1))
 		}
