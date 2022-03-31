@@ -6,8 +6,6 @@ import (
 	"runtime/pprof"
 	"strings"
 
-	"github.com/randlabs/go-webserver/middleware"
-	"github.com/randlabs/go-webserver/models"
 	"github.com/randlabs/go-webserver/request"
 	"github.com/valyala/fasthttp/fasthttpadaptor"
 )
@@ -21,7 +19,7 @@ type DebugProfilerAccessCheck func(req *request.RequestContext) bool
 
 // ServeDebugProfiler adds the GO runtime profile handlers to a web server
 func (srv *Server) ServeDebugProfiler(
-	basePath string, accessCheck DebugProfilerAccessCheck, middlewares ...middleware.MiddlewareFunc,
+	basePath string, accessCheck DebugProfilerAccessCheck, middlewares ...MiddlewareFunc,
 ) {
 	if !strings.HasPrefix(basePath, "/") {
 		basePath = "/" + basePath
@@ -45,7 +43,7 @@ func (srv *Server) ServeDebugProfiler(
 // -----------------------------------------------------------------------------
 // Private functions
 
-func wrapProfilerHandler(handler http.Handler, accessCheck DebugProfilerAccessCheck) models.HandlerFunc {
+func wrapProfilerHandler(handler http.Handler, accessCheck DebugProfilerAccessCheck) HandlerFunc {
 	fasthttpHandler := fasthttpadaptor.NewFastHTTPHandler(handler)
 
 	return func(req *request.RequestContext) error {
@@ -63,6 +61,6 @@ func wrapProfilerHandler(handler http.Handler, accessCheck DebugProfilerAccessCh
 	}
 }
 
-func wrapProfilerHandlerFunc(handler http.HandlerFunc, accessCheck DebugProfilerAccessCheck) models.HandlerFunc {
+func wrapProfilerHandlerFunc(handler http.HandlerFunc, accessCheck DebugProfilerAccessCheck) HandlerFunc {
 	return wrapProfilerHandler(handler, accessCheck)
 }

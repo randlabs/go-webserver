@@ -13,13 +13,23 @@ import (
 
 	"github.com/fasthttp/router"
 	"github.com/randlabs/go-webserver/listener"
-	"github.com/randlabs/go-webserver/middleware"
-	"github.com/randlabs/go-webserver/models"
 	"github.com/randlabs/go-webserver/request"
 	"github.com/valyala/fasthttp"
 )
 
 // -----------------------------------------------------------------------------
+
+// ListenErrorHandler is a callback to call if an error is encountered in the network listener.
+type ListenErrorHandler func(srv *Server, err error)
+
+// RequestErrorHandler is a callback to call if an error is encountered while processing a request.
+type RequestErrorHandler func(req *request.RequestContext, err error)
+
+// HandlerFunc defines a function that handles a request
+type HandlerFunc func(req *request.RequestContext) error
+
+// MiddlewareFunc defines a function that is executed when a request is received
+type MiddlewareFunc func(next HandlerFunc) HandlerFunc
 
 // Server is the main server object
 type Server struct {
@@ -29,7 +39,7 @@ type Server struct {
 	bindPort               uint16
 	listenErrorHandler     ListenErrorHandler
 	requestErrorHandler    RequestErrorHandler
-	middlewares            []middleware.MiddlewareFunc
+	middlewares            []MiddlewareFunc
 	state                  int32
 	startShutdownSignal    chan struct{}
 	shutdownCompleteSignal chan struct{}
@@ -77,17 +87,11 @@ type Options struct {
 	RequestErrorHandler RequestErrorHandler
 
 	// A custom handler for 404 errors
-	NotFoundHandler models.HandlerFunc
+	NotFoundHandler HandlerFunc
 
 	// TLSConfig optionally provides a TLS configuration for use.
 	TLSConfig *tls.Config
 }
-
-// ListenErrorHandler is a callback to call if an error is encountered in the network listener.
-type ListenErrorHandler func(srv *Server, err error)
-
-// RequestErrorHandler is a callback to call if an error is encountered while processing a request.
-type RequestErrorHandler func(req *request.RequestContext, err error)
 
 // ServerFilesOptions sets the parameters to use in a ServeFiles call
 type ServerFilesOptions struct {
@@ -105,7 +109,7 @@ type ServerFilesOptions struct {
 	AcceptByteRange bool
 
 	// Custom file not found handler. Defaults to the server NotFound handler.
-	NotFoundHandler models.HandlerFunc
+	NotFoundHandler HandlerFunc
 }
 
 // -----------------------------------------------------------------------------
@@ -191,7 +195,7 @@ func Create(options Options) (*Server, error) {
 		bindPort:               options.Port,
 		listenErrorHandler:     options.ListenErrorHandler,
 		requestErrorHandler:    options.RequestErrorHandler,
-		middlewares:            make([]middleware.MiddlewareFunc, 0),
+		middlewares:            make([]MiddlewareFunc, 0),
 		state:                  stateNotStarted,
 		startShutdownSignal:    make(chan struct{}, 1),
 		shutdownCompleteSignal: make(chan struct{}, 1),
@@ -333,47 +337,47 @@ func (srv *Server) Stop() {
 }
 
 // Use adds a middleware that will be executed as part of the request handler
-func (srv *Server) Use(middleware middleware.MiddlewareFunc) {
+func (srv *Server) Use(middleware MiddlewareFunc) {
 	srv.middlewares = append(srv.middlewares, middleware)
 }
 
 // GET adds a GET handler for the specified route
-func (srv *Server) GET(path string, handler models.HandlerFunc, middlewares ...middleware.MiddlewareFunc) {
+func (srv *Server) GET(path string, handler HandlerFunc, middlewares ...MiddlewareFunc) {
 	srv.router.Handle("GET", path, srv.createEndpointHandler(handler, middlewares...))
 }
 
 // HEAD adds a HEAD handler for the specified route
-func (srv *Server) HEAD(path string, handler models.HandlerFunc, middlewares ...middleware.MiddlewareFunc) {
+func (srv *Server) HEAD(path string, handler HandlerFunc, middlewares ...MiddlewareFunc) {
 	srv.router.Handle("HEAD", path, srv.createEndpointHandler(handler, middlewares...))
 }
 
 // OPTIONS adds a OPTIONS handler for the specified route
-func (srv *Server) OPTIONS(path string, handler models.HandlerFunc, middlewares ...middleware.MiddlewareFunc) {
+func (srv *Server) OPTIONS(path string, handler HandlerFunc, middlewares ...MiddlewareFunc) {
 	srv.router.Handle("OPTIONS", path, srv.createEndpointHandler(handler, middlewares...))
 }
 
 // POST adds a POST handler for the specified route
-func (srv *Server) POST(path string, handler models.HandlerFunc, middlewares ...middleware.MiddlewareFunc) {
+func (srv *Server) POST(path string, handler HandlerFunc, middlewares ...MiddlewareFunc) {
 	srv.router.Handle("POST", path, srv.createEndpointHandler(handler, middlewares...))
 }
 
 // PUT adds a PUT handler for the specified route
-func (srv *Server) PUT(path string, handler models.HandlerFunc, middlewares ...middleware.MiddlewareFunc) {
+func (srv *Server) PUT(path string, handler HandlerFunc, middlewares ...MiddlewareFunc) {
 	srv.router.Handle("PUT", path, srv.createEndpointHandler(handler, middlewares...))
 }
 
 // PATCH adds a PATCH handler for the specified route
-func (srv *Server) PATCH(path string, handler models.HandlerFunc, middlewares ...middleware.MiddlewareFunc) {
+func (srv *Server) PATCH(path string, handler HandlerFunc, middlewares ...MiddlewareFunc) {
 	srv.router.Handle("PATCH", path, srv.createEndpointHandler(handler, middlewares...))
 }
 
 // DELETE adds a DELETE handler for the specified route
-func (srv *Server) DELETE(path string, handler models.HandlerFunc, middlewares ...middleware.MiddlewareFunc) {
+func (srv *Server) DELETE(path string, handler HandlerFunc, middlewares ...MiddlewareFunc) {
 	srv.router.Handle("DELETE", path, srv.createEndpointHandler(handler, middlewares...))
 }
 
 // ServeFiles adds custom filesystem handler for the specified route
-func (srv *Server) ServeFiles(path string, options ServerFilesOptions, middlewares ...middleware.MiddlewareFunc) error {
+func (srv *Server) ServeFiles(path string, options ServerFilesOptions, middlewares ...MiddlewareFunc) error {
 
 	// Check some options
 	if !filepath.IsAbs(options.RootDirectory) {

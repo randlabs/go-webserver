@@ -1,4 +1,4 @@
-package go_webserver
+package go_webserver_test
 
 import (
 	"fmt"
@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	webserver "github.com/randlabs/go-webserver"
 	"github.com/randlabs/go-webserver/middleware"
 	"github.com/randlabs/go-webserver/request"
 )
@@ -26,11 +27,11 @@ type versionApiOutput struct {
 
 func TestWebServer(t *testing.T) {
 	//Create server
-	srvOpts := Options{
+	srvOpts := webserver.Options{
 		Address: "127.0.0.1",
 		Port:    3000,
 	}
-	srv, err := Create(srvOpts)
+	srv, err := webserver.Create(srvOpts)
 	if err != nil {
 		t.Errorf("unable to create web server [%v]", err)
 		return
@@ -52,7 +53,7 @@ func TestWebServer(t *testing.T) {
 		workDir += string(os.PathSeparator)
 	}
 
-	srv.ServeFiles("/", ServerFilesOptions{
+	srv.ServeFiles("/", webserver.ServerFilesOptions{
 		RootDirectory: workDir + "testdata/public",
 	})
 
