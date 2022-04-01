@@ -1,13 +1,17 @@
 package go_webserver_test
 
 import (
+	"context"
 	"fmt"
+	"net/http"
 	"os"
 	"os/exec"
 	"os/signal"
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"syscall"
 	"testing"
 	"time"
@@ -16,6 +20,8 @@ import (
 	"github.com/randlabs/go-webserver/middleware"
 	"github.com/randlabs/go-webserver/request"
 )
+
+// IMPORTANT NOTE: Tests are intended to be executed separately.
 
 // -----------------------------------------------------------------------------
 
@@ -53,7 +59,7 @@ func TestWebServer(t *testing.T) {
 		workDir += string(os.PathSeparator)
 	}
 
-	srv.ServeFiles("/", webserver.ServerFilesOptions{
+	_ = srv.ServeFiles("/", webserver.ServerFilesOptions{
 		RootDirectory: workDir + "testdata/public",
 	})
 
@@ -83,6 +89,86 @@ func TestWebServer(t *testing.T) {
 	case <-time.After(5 * time.Minute):
 	}
 	fmt.Println("Shutting down...")
+
+	// Stop web server
+	srv.Stop()
+}
+
+// -----------------------------------------------------------------------------
+
+func TestWebServerStress(t *testing.T) {
+	//Create server
+	srvOpts := webserver.Options{
+		Address: "127.0.0.1",
+		Port:    3000,
+	}
+	srv, err := webserver.Create(srvOpts)
+	if err != nil {
+		t.Errorf("unable to create web server [%v]", err)
+		return
+	}
+
+	// Add some middlewares
+	srv.Use(middleware.DisableCacheControl())
+
+	// Add a dummy api function
+	srv.GET("/api/version", renderApiVersion)
+
+	// Start server
+	err = srv.Start()
+	if err != nil {
+		t.Errorf("unable to start web server [%v]", err)
+		return
+	}
+
+	var counter int32
+
+	// Start request workers and main context
+	ctx, cancel := context.WithCancel(context.Background())
+	wg := sync.WaitGroup{}
+	for idx := 0; idx < runtime.GOMAXPROCS(0); idx++ {
+		wg.Add(1)
+
+		go func(ctx context.Context) {
+			url := "http://" + srvOpts.Address + ":" + fmt.Sprint(srvOpts.Port) + "/api/version"
+
+			for {
+				req, err2 := http.NewRequest(http.MethodGet, url, nil)
+				if err2 == nil {
+					var resp *http.Response
+
+					reqCtx, reqCtxCancel := context.WithTimeout(ctx, 5*time.Second)
+
+					resp, err2 = http.DefaultClient.Do(req.WithContext(reqCtx))
+					if resp != nil {
+						_ = resp.Body.Close()
+					}
+
+					reqCtxCancel()
+
+					atomic.AddInt32(&counter, 1)
+				}
+
+				select {
+				case <-ctx.Done():
+					wg.Done()
+					return
+				default:
+				}
+			}
+		}(ctx)
+	}
+
+	// Run
+	select {
+	case <-time.After(5 * time.Second):
+	}
+
+	// Stop workers
+	cancel()
+	wg.Wait()
+
+	t.Logf("Processed %v requests", atomic.LoadInt32(&counter))
 
 	// Stop web server
 	srv.Stop()
