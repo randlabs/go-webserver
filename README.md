@@ -72,5 +72,5 @@ func getTestApi(req *request.RequestContext) error {
 }
 ```
 
-## Lincese
+## License
 See `LICENSE` file for details.
