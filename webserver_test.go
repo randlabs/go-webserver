@@ -45,7 +45,7 @@ func TestWebServer(t *testing.T) {
 
 	// Add some middlewares
 	srv.Use(middleware.DefaultCORS())
-	srv.Use(middleware.DisableCacheControl())
+	srv.Use(middleware.DisableClientCache())
 
 	// Add public files to server
 	var workDir string
@@ -67,7 +67,7 @@ func TestWebServer(t *testing.T) {
 	srv.POST("/api/version", renderApiVersion)
 
 	// Add also profile output
-	srv.ServeDebugProfiler("/debug/", nil)
+	srv.ServeDebugProfiles("/debug/")
 
 	// Start server
 	err = srv.Start()
@@ -109,7 +109,7 @@ func TestWebServerStress(t *testing.T) {
 	}
 
 	// Add some middlewares
-	srv.Use(middleware.DisableCacheControl())
+	srv.Use(middleware.DisableClientCache())
 
 	// Add a dummy api function
 	srv.GET("/api/version", renderApiVersion)
