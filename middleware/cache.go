@@ -10,6 +10,7 @@ import (
 
 // -----------------------------------------------------------------------------
 
+// CacheControlOptions defines the behavior on how Cache-Control headers are sent.
 type CacheControlOptions struct {
 	Public                        bool
 	Private                       bool
@@ -26,7 +27,8 @@ type CacheControlOptions struct {
 
 // -----------------------------------------------------------------------------
 
-func DisableCacheControl() webserver.MiddlewareFunc {
+// DisableClientCache creates a default cache control middleware that disables the client's cache
+func DisableClientCache() webserver.MiddlewareFunc {
 	var zero uint32
 
 	return NewCacheControl(CacheControlOptions{
@@ -40,6 +42,7 @@ func DisableCacheControl() webserver.MiddlewareFunc {
 	})
 }
 
+// NewCacheControl creates a new client cache control middleware based on the specified options
 func NewCacheControl(opts CacheControlOptions) webserver.MiddlewareFunc {
 	cacheValue := make([]string, 0)
 

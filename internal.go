@@ -66,11 +66,18 @@ func (srv *Server) createMasterHandler(masterHandler fasthttp.RequestHandler) fa
 func (srv *Server) createEndpointHandler(epHandler HandlerFunc, middlewares ...MiddlewareFunc) fasthttp.RequestHandler {
 	// Build the recursive function for endpoint middlewares
 	var f func(idx int) HandlerFunc
-	f = func(idx int) HandlerFunc {
-		if idx < len(middlewares) {
-			return middlewares[idx](f(idx + 1))
+
+	if middlewares == nil || len(middlewares) == 0 {
+		f = func(_ int) HandlerFunc {
+			return epHandler
 		}
-		return epHandler
+	} else {
+		f = func(idx int) HandlerFunc {
+			if idx < len(middlewares) {
+				return middlewares[idx](f(idx + 1))
+			}
+			return epHandler
+		}
 	}
 
 	// Wrapper

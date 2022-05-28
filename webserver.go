@@ -25,10 +25,10 @@ type ListenErrorHandler func(srv *Server, err error)
 // RequestErrorHandler is a callback to call if an error is encountered while processing a request.
 type RequestErrorHandler func(req *request.RequestContext, err error)
 
-// HandlerFunc defines a function that handles a request
+// HandlerFunc defines a function that handles a request.
 type HandlerFunc func(req *request.RequestContext) error
 
-// MiddlewareFunc defines a function that is executed when a request is received
+// MiddlewareFunc defines a function that is executed when a request is received.
 type MiddlewareFunc func(next HandlerFunc) HandlerFunc
 
 // Server is the main server object

@@ -12,10 +12,8 @@ import (
 
 // -----------------------------------------------------------------------------
 
+// CORSOptions defines the behavior on how CORS requests should be handled.
 type CORSOptions struct {
-	// Skipper defines a function to skip this middleware.
-	SkipCallback SkipMiddleware
-
 	// AllowOrigins defines a list of origins that may access the resource.
 	// Optional. Defaults to "*".
 	AllowOrigins []string `json:"allow-origins,omitempty"`
@@ -43,19 +41,17 @@ type CORSOptions struct {
 
 // -----------------------------------------------------------------------------
 
+// DefaultCORS creates a default CORS middleware that allows requests from anywhere
 func DefaultCORS() webserver.MiddlewareFunc {
 	return NewCORS(CORSOptions{})
 }
 
+// NewCORS creates a new CORS middleware based on the specified options
 func NewCORS(opts CORSOptions) webserver.MiddlewareFunc {
-	// Parse options
-	if opts.SkipCallback == nil {
-		opts.SkipCallback = defaultSkip
-	}
-
 	var allowOrigins []string
 	var allowOriginPatterns []string
 
+	// Parse options
 	hasWildCardOrigin := true
 	if len(opts.AllowOrigins) > 0 {
 		allowOrigins = make([]string, 0)
@@ -92,10 +88,6 @@ func NewCORS(opts CORSOptions) webserver.MiddlewareFunc {
 
 	return func(next webserver.HandlerFunc) webserver.HandlerFunc {
 		return func(req *request.RequestContext) error {
-			if opts.SkipCallback(req) {
-				return next(req)
-			}
-
 			origin := req.RequestHeader("origin")
 			allowOrigin := ""
 
