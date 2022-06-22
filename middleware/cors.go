@@ -235,8 +235,5 @@ func doesSubdomainMatch(domain string, pattern string) bool {
 			return false
 		}
 	}
-	if patternIdx == 0 {
-		return true
-	}
-	return false
+	return patternIdx == 0
 }

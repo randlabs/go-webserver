@@ -67,7 +67,7 @@ func (srv *Server) createEndpointHandler(epHandler HandlerFunc, middlewares ...M
 	// Build the recursive function for endpoint middlewares
 	var f func(idx int) HandlerFunc
 
-	if middlewares == nil || len(middlewares) == 0 {
+	if len(middlewares) == 0 {
 		f = func(_ int) HandlerFunc {
 			return epHandler
 		}
