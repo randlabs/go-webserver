@@ -64,9 +64,7 @@ func (ln *gracefulListener) Addr() net.Addr {
 // Close closes the inner listener and waits until all the pending
 // open connections are closed before returning.
 func (ln *gracefulListener) Close() error {
-	var err error
-
-	err = ln.ln.Close()
+	err := ln.ln.Close()
 	if err != nil {
 		return err
 	}

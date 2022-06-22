@@ -139,7 +139,7 @@ func TestWebServerStress(t *testing.T) {
 
 					reqCtx, reqCtxCancel := context.WithTimeout(ctx, 5*time.Second)
 
-					resp, err2 = http.DefaultClient.Do(req.WithContext(reqCtx))
+					resp, _ = http.DefaultClient.Do(req.WithContext(reqCtx))
 					if resp != nil {
 						_ = resp.Body.Close()
 					}
@@ -160,9 +160,7 @@ func TestWebServerStress(t *testing.T) {
 	}
 
 	// Run
-	select {
-	case <-time.After(5 * time.Second):
-	}
+	time.Sleep(5 * time.Second)
 
 	// Stop workers
 	cancel()
