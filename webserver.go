@@ -89,8 +89,19 @@ type Options struct {
 	// A custom handler for 404 errors
 	NotFoundHandler HandlerFunc
 
+	// A custom handler for 405 errors
+	MethodNotAllowedHandler HandlerFunc
+
 	// TLSConfig optionally provides a TLS configuration for use.
 	TLSConfig *tls.Config
+
+	// If MinReqFileDescs is greater than zero, specifies the minimum number of required file descriptors
+	// to be available.
+	//
+	// NOTES:
+	// 1. Only valid on *nix operating systems.
+	// 2. Starting from Go v1.19, the soft limit is automatically raised to the maximum allowed on process startup.
+	MinReqFileDescs uint64
 }
 
 // ServerFilesOptions sets the parameters to use in a ServeFiles call
@@ -127,12 +138,6 @@ const (
 	defaultServerName = "go-webserver"
 
 	serveFilesSuffix = "{filepath:*}"
-
-	stateNotStarted = 1
-	stateStarting   = 2
-	stateRunning    = 3
-	stateStopping   = 4
-	stateStopped    = 3
 )
 
 // -----------------------------------------------------------------------------
@@ -188,6 +193,10 @@ func Create(options Options) (*Server, error) {
 		parsedBindAddress = p4
 	}
 
+	if options.MinReqFileDescs > 0 && checkMaxFileDescriptors(options.MinReqFileDescs) == false {
+		return nil, errors.New("the number of process' file descriptors doesn't fulfill the minimum requirements")
+	}
+
 	// Create a new server container
 	srv := &Server{
 		router:                 router.New(),
@@ -207,7 +216,13 @@ func Create(options Options) (*Server, error) {
 		srv.requestErrorHandler = srv.defaultRequestErrorHandler
 	}
 
-	// Set the NotFound handler.
+	// Override some router settings
+	srv.router.RedirectTrailingSlash = true
+	srv.router.RedirectFixedPath = true
+	srv.router.HandleMethodNotAllowed = true
+	srv.router.HandleOPTIONS = false
+
+	// Set the endpoint not found handler
 	if options.NotFoundHandler != nil {
 		srv.router.NotFound = srv.createEndpointHandler(options.NotFoundHandler)
 	} else {
@@ -216,11 +231,14 @@ func Create(options Options) (*Server, error) {
 		}
 	}
 
-	// Override some router settings
-	srv.router.RedirectTrailingSlash = true
-	srv.router.RedirectFixedPath = true
-	srv.router.HandleMethodNotAllowed = true
-	srv.router.HandleOPTIONS = false
+	// Set the method not allowed handler
+	if options.MethodNotAllowedHandler != nil {
+		srv.router.MethodNotAllowed = srv.createEndpointHandler(options.MethodNotAllowedHandler)
+	} else {
+		srv.router.MethodNotAllowed = func(ctx *fasthttp.RequestCtx) {
+			ctx.Error(fasthttp.StatusMessage(fasthttp.StatusMethodNotAllowed), fasthttp.StatusMethodNotAllowed)
+		}
+	}
 
 	// Check server name
 	serverName := options.Name
@@ -258,7 +276,7 @@ func Create(options Options) (*Server, error) {
 // Start initiates listening
 func (srv *Server) Start() error {
 	if !atomic.CompareAndSwapInt32(&srv.state, stateNotStarted, stateStarting) {
-		return errors.New("invalid state")
+		return errors.New("server is not stopped")
 	}
 
 	// Create the listener
@@ -276,7 +294,7 @@ func (srv *Server) Start() error {
 	// Create the graceful shutdown listener
 	ln, err := createListener(network, address+":"+strconv.Itoa(int(srv.bindPort)))
 	if err != nil {
-		atomic.StoreInt32(&srv.state, stateNotStarted)
+		srv.setState(stateNotStarted)
 		return err
 	}
 
@@ -288,37 +306,8 @@ func (srv *Server) Start() error {
 	// Wrap listener inside a graceful shutdown listener
 	ln = listener.NewGracefulListener(ln, 5*time.Second)
 
-	// Start accepting connections
-	errorChannel := make(chan error, 1)
-	go func() {
-		errorChannel <- srv.fastserver.Serve(ln)
-	}()
-
-	// Set new state
-	atomic.StoreInt32(&srv.state, stateRunning)
-
-	// Run in background until shutdown or error
-	go func() {
-		select {
-		case errCh := <-errorChannel:
-			atomic.StoreInt32(&srv.state, stateStopping)
-
-			// Web server is no longer able to accept more connections
-			if srv.listenErrorHandler != nil {
-				srv.listenErrorHandler(srv, errCh)
-			}
-
-		// handle termination signal
-		case <-srv.startShutdownSignal:
-			atomic.StoreInt32(&srv.state, stateStopping)
-
-			// Attempt the graceful shutdown by closing the listener
-			// and completing all inflight requests.
-			_ = srv.fastserver.Shutdown()
-		}
-
-		atomic.StoreInt32(&srv.state, stateStopped)
-	}()
+	// Start accepting connections and run in background until shutdown or error
+	srv.serve(ln)
 
 	// Done
 	return nil
@@ -378,7 +367,6 @@ func (srv *Server) DELETE(path string, handler HandlerFunc, middlewares ...Middl
 
 // ServeFiles adds custom filesystem handler for the specified route
 func (srv *Server) ServeFiles(path string, options ServerFilesOptions, middlewares ...MiddlewareFunc) error {
-
 	// Check some options
 	if !filepath.IsAbs(options.RootDirectory) {
 		return errors.New("absolute path must be provided")
