@@ -68,6 +68,9 @@ type Options struct {
 	// has returned.
 	WriteTimeout time.Duration
 
+	// The maximum number of concurrent connections the server may serve. Defaults to 256K connections.
+	Concurrency int
+
 	// Maximum number of concurrent client connections allowed per IP.
 	MaxConnsPerIP int
 
@@ -260,6 +263,7 @@ func Create(options Options) (*Server, error) {
 		Handler:            srv.createMasterHandler(h),
 		ReadTimeout:        readTimeout,
 		WriteTimeout:       writeTimeout,
+		Concurrency:        options.Concurrency,
 		MaxConnsPerIP:      maxConnsPerIP,
 		MaxRequestsPerConn: maxRequestsPerConn,
 		DisableKeepalive:   true,
