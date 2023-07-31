@@ -1,6 +1,6 @@
 //go:build unix
 
-package go_webserver
+package util
 
 import (
 	"syscall"
@@ -8,7 +8,7 @@ import (
 
 // -----------------------------------------------------------------------------
 
-func checkMaxFileDescriptors(value uint64) bool {
+func CheckMaxFileDescriptors(value uint64) bool {
 	var rLimit syscall.Rlimit
 
 	err := syscall.Getrlimit(syscall.RLIMIT_NOFILE, &rLimit)

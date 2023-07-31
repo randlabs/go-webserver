@@ -9,14 +9,16 @@ import (
 
 // -----------------------------------------------------------------------------
 
+// HandlerFromHttpHandler returns a HandlerFunc based on the provided http.Handler
 func HandlerFromHttpHandler(handler http.Handler) HandlerFunc {
-	fasthttpHandler := fasthttpadaptor.NewFastHTTPHandler(handler)
+	h := fasthttpadaptor.NewFastHTTPHandler(handler)
 	return func(req *request.RequestContext) error {
-		req.CallFastHttpHandler(fasthttpHandler)
+		req.CallFastHttpHandler(h)
 		return nil
 	}
 }
 
+// HandlerFromHttpHandlerFunc returns a HandlerFunc based on the provided http.HandlerFunc
 func HandlerFromHttpHandlerFunc(f http.HandlerFunc) HandlerFunc {
 	return HandlerFromHttpHandler(f)
 }

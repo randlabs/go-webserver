@@ -8,6 +8,7 @@ import (
 
 	webserver "github.com/randlabs/go-webserver"
 	"github.com/randlabs/go-webserver/request"
+	"github.com/randlabs/go-webserver/util"
 )
 
 // -----------------------------------------------------------------------------
@@ -86,6 +87,7 @@ func NewCORS(opts CORSOptions) webserver.MiddlewareFunc {
 	exposeHeaders := strings.Join(opts.ExposeHeaders, ",")
 	maxAge := strconv.Itoa(opts.MaxAge)
 
+	// Setup middleware function
 	return func(next webserver.HandlerFunc) webserver.HandlerFunc {
 		return func(req *request.RequestContext) error {
 			origin := req.RequestHeader("origin")
@@ -114,10 +116,11 @@ func NewCORS(opts CORSOptions) webserver.MiddlewareFunc {
 
 			// No origin provided?
 			if len(origin) == 0 {
-				if !preflight {
-					return next(req)
+				if preflight {
+					return req.NoContent(http.StatusNoContent)
 				}
-				return req.NoContent(http.StatusNoContent)
+				// Go to next middleware
+				return next(req)
 			}
 
 			// Check allowed origins
@@ -131,7 +134,7 @@ func NewCORS(opts CORSOptions) webserver.MiddlewareFunc {
 
 			if len(allowOrigin) == 0 {
 				for _, o := range allowOrigins {
-					if doesSubdomainMatch(origin, o) {
+					if util.DoesSubdomainMatch(origin, o) {
 						allowOrigin = origin
 						break
 					}
@@ -149,10 +152,11 @@ func NewCORS(opts CORSOptions) webserver.MiddlewareFunc {
 
 			// Origin not allowed
 			if len(allowOrigin) == 0 {
-				if !preflight {
-					return next(req)
+				if preflight {
+					return req.NoContent(http.StatusNoContent)
 				}
-				return req.NoContent(http.StatusNoContent)
+				// Go to next middleware
+				return next(req)
 			}
 
 			req.SetResponseHeader("Access-Control-Allow-Origin", allowOrigin)
@@ -165,6 +169,7 @@ func NewCORS(opts CORSOptions) webserver.MiddlewareFunc {
 				if len(exposeHeaders) > 0 {
 					req.SetResponseHeader("Access-Control-Expose-Headers", exposeHeaders)
 				}
+				// Go to next middleware
 				return next(req)
 			}
 
@@ -193,47 +198,4 @@ func NewCORS(opts CORSOptions) webserver.MiddlewareFunc {
 			return req.NoContent(http.StatusNoContent)
 		}
 	}
-}
-
-func doesSubdomainMatch(domain string, pattern string) bool {
-	domainIdx := strings.Index(domain, "://")
-	patternIdx := strings.Index(pattern, "://")
-	if domainIdx < 0 || patternIdx < 0 {
-		return false
-	}
-	if domain[:domainIdx] != pattern[:patternIdx] {
-		return false
-	}
-
-	domain = domain[domainIdx+3:]
-	if len(domain) > 253 {
-		return false // Invalid domain length
-	}
-	pattern = pattern[patternIdx+3:]
-
-	domainParts := strings.Split(domain, ".")
-	patternParts := strings.Split(pattern, ".")
-	if len(patternParts) == 0 {
-		return false
-	}
-
-	patternIdx = len(patternParts)
-	domainIdx = len(domainParts)
-	for domainIdx > 0 {
-		if patternIdx == 0 {
-			return false
-		}
-
-		domainIdx -= 1
-		patternIdx -= 1
-
-		p := patternParts[patternIdx]
-		if p == "*" {
-			return true
-		}
-		if p != domainParts[domainIdx] {
-			return false
-		}
-	}
-	return patternIdx == 0
 }

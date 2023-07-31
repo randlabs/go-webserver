@@ -22,6 +22,9 @@ import (
 )
 
 // IMPORTANT NOTE: Tests are intended to be executed separately.
+const (
+	secondsToRun = 5
+)
 
 // -----------------------------------------------------------------------------
 
@@ -83,7 +86,7 @@ func TestWebServer(t *testing.T) {
 	fmt.Println("Server running. Press CTRL+C to stop.")
 
 	c := make(chan os.Signal, 2)
-	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
+	signal.Notify(c, os.Interrupt, syscall.SIGTERM, syscall.SIGINT)
 	select {
 	case <-c:
 	case <-time.After(5 * time.Minute):
@@ -160,13 +163,13 @@ func TestWebServerStress(t *testing.T) {
 	}
 
 	// Run
-	time.Sleep(5 * time.Second)
+	time.Sleep(secondsToRun * time.Second)
 
 	// Stop workers
 	cancel()
 	wg.Wait()
 
-	t.Logf("Processed %v requests", atomic.LoadInt32(&counter))
+	t.Logf("Processed %v requests in %d seconds", atomic.LoadInt32(&counter), secondsToRun)
 
 	// Stop web server
 	srv.Stop()
