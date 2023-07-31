@@ -12,8 +12,8 @@ import (
 	"time"
 
 	"github.com/fasthttp/router"
-	"github.com/randlabs/go-webserver/listener"
 	"github.com/randlabs/go-webserver/request"
+	"github.com/randlabs/go-webserver/util"
 	"github.com/valyala/fasthttp"
 )
 
@@ -116,9 +116,6 @@ type ServerFilesOptions struct {
 	// 'index.html' and 'index.htm' files and serve them if available.
 	DisableDefaultIndexPages bool
 
-	// Enable Brotli compression if available or default to gzip
-	EnableBrotli bool
-
 	// Accept client byte range requests
 	AcceptByteRange bool
 
@@ -196,7 +193,7 @@ func Create(options Options) (*Server, error) {
 		parsedBindAddress = p4
 	}
 
-	if options.MinReqFileDescs > 0 && checkMaxFileDescriptors(options.MinReqFileDescs) == false {
+	if options.MinReqFileDescs > 0 && util.CheckMaxFileDescriptors(options.MinReqFileDescs) == false {
 		return nil, errors.New("the number of process' file descriptors doesn't fulfill the minimum requirements")
 	}
 
@@ -307,9 +304,6 @@ func (srv *Server) Start() error {
 		ln = tls.NewListener(ln, srv.fastserver.TLSConfig.Clone())
 	}
 
-	// Wrap listener inside a graceful shutdown listener
-	ln = listener.NewGracefulListener(ln, 5*time.Second)
-
 	// Start accepting connections and run in background until shutdown or error
 	srv.serve(ln)
 
@@ -369,44 +363,42 @@ func (srv *Server) DELETE(path string, handler HandlerFunc, middlewares ...Middl
 	srv.router.Handle("DELETE", path, srv.createEndpointHandler(handler, middlewares...))
 }
 
+// CustomMethod adds a custom method handler for the specified route
+func (srv *Server) CustomMethod(method string, path string, handler HandlerFunc, middlewares ...MiddlewareFunc) {
+	srv.router.Handle(method, path, srv.createEndpointHandler(handler, middlewares...))
+}
+
 // ServeFiles adds custom filesystem handler for the specified route
-func (srv *Server) ServeFiles(path string, options ServerFilesOptions, middlewares ...MiddlewareFunc) error {
+func (srv *Server) ServeFiles(path string, opts ServerFilesOptions, middlewares ...MiddlewareFunc) error {
 	// Check some options
-	if !filepath.IsAbs(options.RootDirectory) {
+	if !filepath.IsAbs(opts.RootDirectory) {
 		return errors.New("absolute path must be provided")
 	}
 
-	if !strings.HasSuffix(path, "/") {
-		path += "/"
-	}
-	path += serveFilesSuffix
+	// Normalize path
+	path = util.SanitizeUrlPath(path + "/" + serveFilesSuffix)
 
 	indexNames := make([]string, 0)
-	if !options.DisableDefaultIndexPages {
-		indexNames = append(indexNames, "index.html")
-		indexNames = append(indexNames, "index.htm")
-	}
-	var pathNotFoundHandler fasthttp.RequestHandler
-	if options.NotFoundHandler != nil {
-		pathNotFoundHandler = srv.createEndpointHandler(options.NotFoundHandler)
-	} else {
-		pathNotFoundHandler = srv.router.NotFound
+	if !opts.DisableDefaultIndexPages {
+		indexNames = append(indexNames, "index.html", "index.htm")
 	}
 
 	// Create filesystem
 	fs := fasthttp.FS{
-		Root:               options.RootDirectory,
+		Root:               opts.RootDirectory,
 		IndexNames:         indexNames,
-		GenerateIndexPages: !options.DisableDefaultIndexPages,
-		CompressBrotli:     !options.EnableBrotli,
-		AcceptByteRange:    options.AcceptByteRange,
-		PathNotFound:       pathNotFoundHandler,
+		GenerateIndexPages: !opts.DisableDefaultIndexPages,
+		AcceptByteRange:    opts.AcceptByteRange,
+		PathNotFound:       srv.router.NotFound,
+	}
+	if opts.NotFoundHandler != nil {
+		fs.PathNotFound = srv.createEndpointHandler(opts.NotFoundHandler)
 	}
 
-	// If the url path contains sublevels, we must remove them in order to avoid mapping them into the filesystem
-	// I.e.: If base path is '/foo/bar' and root-dir is '/tmp/public' is request to '/foo/bar/index.html' would
-	//       become '/tmp/public/foo/bar/index.html' instead of '/tmp/public/index.html'.
-	toStrip := strings.Count(path[:len(path)-len(serveFilesSuffix)-1], "/") // Exclude the last subpath fragment
+	// If the url path contains a subdirectory within the base path, we must remove them in order to avoid mapping it
+	// into the filesystem. I.e.: If base path is '/foo/bar' and root-dir is '/tmp/public' is request to
+	// '/foo/bar/index.html' would become '/tmp/public/foo/bar/index.html' instead of '/tmp/public/index.html'.
+	toStrip := strings.Count(path[:len(path)-(len(serveFilesSuffix)+1)], "/") // Exclude the last fragment
 	if toStrip > 0 {
 		fs.PathRewrite = fasthttp.NewPathSlashesStripper(toStrip)
 	}

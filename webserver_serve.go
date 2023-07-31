@@ -1,8 +1,10 @@
 package go_webserver
 
 import (
+	"context"
 	"net"
 	"sync/atomic"
+	"time"
 )
 
 // -----------------------------------------------------------------------------
@@ -13,6 +15,10 @@ const (
 	stateRunning    = 3
 	stateStopping   = 4
 	stateStopped    = 5
+)
+
+const (
+	shutdownTimeout = 5 * time.Second
 )
 
 // -----------------------------------------------------------------------------
@@ -45,9 +51,10 @@ func (srv *Server) serveLoop(ch chan error) {
 	case <-srv.startShutdownSignal:
 		srv.setState(stateStopping)
 
-		// Attempt the graceful shutdown by closing the listener
-		// and completing all inflight requests.
-		_ = srv.fastserver.Shutdown()
+		// Attempt the graceful shutdown by closing the listener and completing all inflight requests.
+		ctx, ctxCancel := context.WithTimeout(context.Background(), shutdownTimeout)
+		_ = srv.fastserver.ShutdownWithContext(ctx)
+		ctxCancel()
 	}
 
 	srv.setState(stateStopped)

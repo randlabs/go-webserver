@@ -17,12 +17,14 @@ type ProtectedEndpointEvaluator func(req *request.RequestContext) bool
 
 // ProtectedWithToken creates a protection middleware based on an access token string
 func ProtectedWithToken(accessToken string) webserver.MiddlewareFunc {
+	// Allow access if no token is provided
+	if len(accessToken) == 0 {
+		return NewNoOP()
+	}
 	tokenBytes := []byte(accessToken)
-	return NewProtected(func(req *request.RequestContext) bool {
-		if len(tokenBytes) == 0 {
-			return false // Allow access
-		}
 
+	// Create a new protected
+	return NewProtected(func(req *request.RequestContext) bool {
 		var token []byte
 
 		// Get X-Access-Token header
@@ -52,12 +54,16 @@ func ProtectedWithToken(accessToken string) webserver.MiddlewareFunc {
 
 // NewProtected creates a protection middleware based on an evaluator callback
 func NewProtected(evaluator ProtectedEndpointEvaluator) webserver.MiddlewareFunc {
+	// Setup middleware function
 	return func(next webserver.HandlerFunc) webserver.HandlerFunc {
 		return func(req *request.RequestContext) error {
+			// Run evaluator and, if it returns true, assume the endpoint is protected
 			if evaluator != nil && evaluator(req) {
 				req.AccessDenied("403 forbidden")
 				return nil
 			}
+
+			// Go to next middleware
 			return next(req)
 		}
 	}

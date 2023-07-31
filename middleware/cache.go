@@ -44,6 +44,7 @@ func DisableClientCache() webserver.MiddlewareFunc {
 
 // NewCacheControl creates a new client cache control middleware based on the specified options
 func NewCacheControl(opts CacheControlOptions) webserver.MiddlewareFunc {
+	// Build header content
 	cacheValue := make([]string, 0)
 
 	if opts.Public {
@@ -85,12 +86,13 @@ func NewCacheControl(opts CacheControlOptions) webserver.MiddlewareFunc {
 
 	finalCacheValue := strings.Join(cacheValue, ",")
 
+	// Setup middleware function
 	return func(next webserver.HandlerFunc) webserver.HandlerFunc {
 		return func(req *request.RequestContext) error {
 			// Set cache control header
 			req.SetResponseHeader("Cache-Control", finalCacheValue)
 
-			// Done
+			// Go to next middleware
 			return next(req)
 		}
 	}

@@ -1,9 +1,9 @@
 //go:build !unix
 
-package go_webserver
+package util
 
 // -----------------------------------------------------------------------------
 
-func checkMaxFileDescriptors(_ uint64) bool {
+func CheckMaxFileDescriptors(_ uint64) bool {
 	return true
 }
