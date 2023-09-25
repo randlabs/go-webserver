@@ -370,13 +370,18 @@ func (srv *Server) CustomMethod(method string, path string, handler HandlerFunc,
 
 // ServeFiles adds custom filesystem handler for the specified route
 func (srv *Server) ServeFiles(path string, opts ServerFilesOptions, middlewares ...MiddlewareFunc) error {
+	var err error
+
 	// Check some options
 	if !filepath.IsAbs(opts.RootDirectory) {
 		return errors.New("absolute path must be provided")
 	}
 
 	// Normalize path
-	path = util.SanitizeUrlPath(path + "/" + serveFilesSuffix)
+	path, err = util.SanitizeUrlPath(path + "/" + serveFilesSuffix)
+	if err != nil {
+		return err
+	}
 
 	indexNames := make([]string, 0)
 	if !opts.DisableDefaultIndexPages {

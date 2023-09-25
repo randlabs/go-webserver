@@ -44,7 +44,14 @@ func NewTrailingSlash(opts TrailingSlashOptions) webserver.MiddlewareFunc {
 				}
 			}
 			if modified {
-				uri.SetPath(util.SanitizeUrlPath(path))
+				var err error
+
+				path, err = util.SanitizeUrlPath(path)
+				if err != nil {
+					req.Error(err.Error(), 400)
+					return nil
+				}
+				uri.SetPath(path)
 
 				// Redirect
 				if opts.RedirectCode != 0 {
