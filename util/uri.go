@@ -1,15 +1,16 @@
 package util
 
 import (
+	"errors"
 	"strings"
 )
 
 // -----------------------------------------------------------------------------
 
-func SanitizeUrlPath(path string) string {
+func SanitizeUrlPath(path string) (string, error) {
 	// Nothing to sanitize?
 	if len(path) == 0 {
-		return "/"
+		return "/", nil
 	}
 
 	// Convert backslashes
@@ -28,6 +29,8 @@ func SanitizeUrlPath(path string) string {
 			} else {
 				if len(newPathFragments) > 0 {
 					newPathFragments = newPathFragments[0 : len(newPathFragments)-1]
+				} else {
+					return "", errors.New("invalid path")
 				}
 			}
 		}
@@ -40,5 +43,5 @@ func SanitizeUrlPath(path string) string {
 	}
 
 	// Done
-	return path
+	return path, nil
 }
