@@ -3,6 +3,7 @@ package go_webserver
 import (
 	"crypto/tls"
 	"errors"
+	"io/fs"
 	"net"
 	"path/filepath"
 	"runtime"
@@ -121,6 +122,9 @@ type ServerFilesOptions struct {
 
 	// Custom file not found handler. Defaults to the server NotFound handler.
 	NotFoundHandler HandlerFunc
+
+	// File-system to use. Defaults to the OS file-system.
+	FS fs.FS
 }
 
 // -----------------------------------------------------------------------------
@@ -390,11 +394,15 @@ func (srv *Server) ServeFiles(path string, opts ServerFilesOptions, middlewares 
 
 	// Create filesystem
 	fs := fasthttp.FS{
+		FS:                 opts.FS,
 		Root:               opts.RootDirectory,
 		IndexNames:         indexNames,
 		GenerateIndexPages: !opts.DisableDefaultIndexPages,
 		AcceptByteRange:    opts.AcceptByteRange,
 		PathNotFound:       srv.router.NotFound,
+		Compress:           true,
+		CompressBrotli:     true,
+		SkipCache:          true,
 	}
 	if opts.NotFoundHandler != nil {
 		fs.PathNotFound = srv.createEndpointHandler(opts.NotFoundHandler)
