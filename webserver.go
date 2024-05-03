@@ -13,8 +13,8 @@ import (
 	"time"
 
 	"github.com/fasthttp/router"
-	"github.com/randlabs/go-webserver/request"
-	"github.com/randlabs/go-webserver/util"
+	"github.com/randlabs/go-webserver/v2/trusted_proxy"
+	"github.com/randlabs/go-webserver/v2/util"
 	"github.com/valyala/fasthttp"
 )
 
@@ -24,13 +24,10 @@ import (
 type ListenErrorHandler func(srv *Server, err error)
 
 // RequestErrorHandler is a callback to call if an error is encountered while processing a request.
-type RequestErrorHandler func(req *request.RequestContext, err error)
+type RequestErrorHandler func(req *RequestContext, err error)
 
 // HandlerFunc defines a function that handles a request.
-type HandlerFunc func(req *request.RequestContext) error
-
-// MiddlewareFunc defines a function that is executed when a request is received.
-type MiddlewareFunc func(next HandlerFunc) HandlerFunc
+type HandlerFunc func(req *RequestContext) error
 
 // Server is the main server object
 type Server struct {
@@ -40,11 +37,12 @@ type Server struct {
 	bindPort               uint16
 	listenErrorHandler     ListenErrorHandler
 	requestErrorHandler    RequestErrorHandler
-	middlewares            []MiddlewareFunc
+	middlewares            []HandlerFunc
 	state                  int32
 	startShutdownSignal    chan struct{}
 	shutdownCompleteSignal chan struct{}
-	requestPool            *request.RequestContextPool
+	requestCtxPool         *RequestContextPool
+	trustedProxy           *trusted_proxy.TrustedProxy
 }
 
 // Options specifies the server creation options.
@@ -58,31 +56,28 @@ type Options struct {
 	// Port is the port number the server will listen.
 	Port uint16
 
-	// ReadTimeout is the amount of time allowed to read
-	// the full request including body. The connection's read
-	// deadline is reset when the connection opens, or for
-	// keep-alive connections after the first byte has been read.
+	// ReadTimeout is the amount of time allowed to read the full request including body. The connection's read
+	// deadline is reset when the connection opens, or for keep-alive connections after the first byte has been read.
 	ReadTimeout time.Duration
 
-	// WriteTimeout is the maximum duration before timing out
-	// writes of the response. It is reset after the request handler
-	// has returned.
+	// WriteTimeout is the maximum duration before timing out writes of the response. It is reset after the
+	// request handler has returned.
 	WriteTimeout time.Duration
 
 	// The maximum number of concurrent connections the server may serve. Defaults to 256K connections.
 	Concurrency int
 
-	// Maximum number of concurrent client connections allowed per IP.
-	MaxConnsPerIP int
-
-	// Maximum number of requests served per connection.
-	MaxRequestsPerConn int
-
 	// Maximum request body size.
 	MaxRequestBodySize int
 
-	// Enable compression.
-	EnableCompression bool
+	// Closes incoming connections after sending the first response to client.
+	DisableKeepalive bool
+
+	// Enable request body streaming and call the handler sooner when given body is larger than the current limit.
+	StreamRequestBody bool
+
+	// Disable Multipart Form data parsing and return the binary blob instead.
+	DisablePreParseMultipartForm bool
 
 	// A callback to call if an error is encountered.
 	ListenErrorHandler ListenErrorHandler
@@ -106,6 +101,14 @@ type Options struct {
 	// 1. Only valid on *nix operating systems.
 	// 2. Starting from Go v1.19, the soft limit is automatically raised to the maximum allowed on process startup.
 	MinReqFileDescs uint64
+
+	// Use TrustedProxies to prevent header spoofing when you are behind a proxy. When used, and the remote IP
+	// is a trusted proxy, the RequestContext object will behalf in the following way:
+	//   1. Scheme:   The value from X-Forwarded-Proto, X-Forwarded-Protocol, X-Forwarded-Ssl or X-Url-Scheme header
+	//                will be used.
+	//   2. RemoteIP: The value on ProxyHeader header will be used.
+	//   3. Host:     The value from X-Forwarded-Host header will be used.
+	TrustedProxies []string
 }
 
 // ServerFilesOptions sets the parameters to use in a ServeFiles call
@@ -132,7 +135,6 @@ type ServerFilesOptions struct {
 const (
 	DefaultReadTimeout        = 10 * time.Second
 	DefaultWriteTimeout       = 10 * time.Second
-	DefaultMaxRequestsPerConn = 8
 	DefaultMaxRequestBodySize = 4 * 1048576 // 4MB
 )
 
@@ -147,49 +149,37 @@ const (
 // -----------------------------------------------------------------------------
 
 // Create creates a new webserver
-func Create(options Options) (*Server, error) {
+func Create(opts Options) (*Server, error) {
 	// Check options
-	if len(options.Address) == 0 {
+	if len(opts.Address) == 0 {
 		return nil, errors.New("invalid server bind address")
 	}
-	if options.Port < 1 || options.Port > 65535 {
+	if opts.Port < 1 || opts.Port > 65535 {
 		return nil, errors.New("invalid server port")
 	}
 
-	readTimeout := options.ReadTimeout
+	readTimeout := opts.ReadTimeout
 	if readTimeout < time.Duration(0) {
 		return nil, errors.New("invalid read timeout")
 	} else if readTimeout == time.Duration(0) {
 		readTimeout = DefaultReadTimeout
 	}
 
-	writeTimeout := options.WriteTimeout
+	writeTimeout := opts.WriteTimeout
 	if writeTimeout < time.Duration(0) {
 		return nil, errors.New("invalid write timeout")
 	} else if writeTimeout == time.Duration(0) {
 		writeTimeout = DefaultWriteTimeout
 	}
 
-	maxConnsPerIP := options.MaxConnsPerIP
-	if maxConnsPerIP < 0 {
-		return nil, errors.New("invalid max connections per ip")
-	}
-
-	maxRequestsPerConn := options.MaxRequestsPerConn
-	if maxRequestsPerConn < 0 {
-		return nil, errors.New("invalid max requests per connections")
-	} else if maxRequestsPerConn == 0 {
-		maxRequestsPerConn = DefaultMaxRequestsPerConn
-	}
-
-	maxRequestBodySize := options.MaxRequestBodySize
+	maxRequestBodySize := opts.MaxRequestBodySize
 	if maxRequestBodySize < 0 {
 		return nil, errors.New("invalid max request body size")
 	} else if maxRequestBodySize == 0 {
 		maxRequestBodySize = DefaultMaxRequestBodySize
 	}
 
-	parsedBindAddress := net.ParseIP(options.Address)
+	parsedBindAddress := net.ParseIP(opts.Address)
 	if parsedBindAddress == nil {
 		return nil, errors.New("invalid server bind address")
 	}
@@ -197,7 +187,7 @@ func Create(options Options) (*Server, error) {
 		parsedBindAddress = p4
 	}
 
-	if options.MinReqFileDescs > 0 && util.CheckMaxFileDescriptors(options.MinReqFileDescs) == false {
+	if opts.MinReqFileDescs > 0 && util.CheckMaxFileDescriptors(opts.MinReqFileDescs) == false {
 		return nil, errors.New("the number of process' file descriptors doesn't fulfill the minimum requirements")
 	}
 
@@ -205,19 +195,24 @@ func Create(options Options) (*Server, error) {
 	srv := &Server{
 		router:                 router.New(),
 		bindAddress:            parsedBindAddress,
-		bindPort:               options.Port,
-		listenErrorHandler:     options.ListenErrorHandler,
-		requestErrorHandler:    options.RequestErrorHandler,
-		middlewares:            make([]MiddlewareFunc, 0),
+		bindPort:               opts.Port,
+		listenErrorHandler:     opts.ListenErrorHandler,
+		requestErrorHandler:    opts.RequestErrorHandler,
+		middlewares:            make([]HandlerFunc, 0),
 		state:                  stateNotStarted,
 		startShutdownSignal:    make(chan struct{}, 1),
 		shutdownCompleteSignal: make(chan struct{}, 1),
-		requestPool:            request.NewRequestContextPool(),
+		requestCtxPool:         newRequestContextPool(),
+	}
+	if len(opts.TrustedProxies) > 0 {
+		srv.trustedProxy = trusted_proxy.NewTrustedProxy(opts.TrustedProxies)
 	}
 
 	// Set default request error handler if none was specified.
 	if srv.requestErrorHandler == nil {
-		srv.requestErrorHandler = srv.defaultRequestErrorHandler
+		srv.requestErrorHandler = func(req *RequestContext, err error) {
+			req.InternalServerError(err.Error())
+		}
 	}
 
 	// Override some router settings
@@ -227,8 +222,8 @@ func Create(options Options) (*Server, error) {
 	srv.router.HandleOPTIONS = false
 
 	// Set the endpoint not found handler
-	if options.NotFoundHandler != nil {
-		srv.router.NotFound = srv.createEndpointHandler(options.NotFoundHandler)
+	if opts.NotFoundHandler != nil {
+		srv.router.NotFound = srv.createEndpointHandler(opts.NotFoundHandler)
 	} else {
 		srv.router.NotFound = func(ctx *fasthttp.RequestCtx) {
 			ctx.Error(fasthttp.StatusMessage(fasthttp.StatusNotFound), fasthttp.StatusNotFound)
@@ -236,8 +231,8 @@ func Create(options Options) (*Server, error) {
 	}
 
 	// Set the method not allowed handler
-	if options.MethodNotAllowedHandler != nil {
-		srv.router.MethodNotAllowed = srv.createEndpointHandler(options.MethodNotAllowedHandler)
+	if opts.MethodNotAllowedHandler != nil {
+		srv.router.MethodNotAllowed = srv.createEndpointHandler(opts.MethodNotAllowedHandler)
 	} else {
 		srv.router.MethodNotAllowed = func(ctx *fasthttp.RequestCtx) {
 			ctx.Error(fasthttp.StatusMessage(fasthttp.StatusMethodNotAllowed), fasthttp.StatusMethodNotAllowed)
@@ -245,32 +240,22 @@ func Create(options Options) (*Server, error) {
 	}
 
 	// Check server name
-	serverName := options.Name
+	serverName := opts.Name
 	if len(serverName) == 0 {
 		serverName = defaultServerName
-	}
-
-	// Get the primary handler for the server
-	h := srv.router.Handler
-
-	// If compression is enabled, then wrap it with the one that handles compression.
-	if options.EnableCompression {
-		h = fasthttp.CompressHandler(h)
 	}
 
 	// Create FastHTTP server
 	srv.fastserver = fasthttp.Server{
 		Name:               serverName,
-		Handler:            srv.createMasterHandler(h),
+		Handler:            srv.router.Handler,
 		ReadTimeout:        readTimeout,
 		WriteTimeout:       writeTimeout,
-		Concurrency:        options.Concurrency,
-		MaxConnsPerIP:      maxConnsPerIP,
-		MaxRequestsPerConn: maxRequestsPerConn,
-		DisableKeepalive:   true,
+		Concurrency:        opts.Concurrency,
+		DisableKeepalive:   opts.DisableKeepalive,
 		MaxRequestBodySize: maxRequestBodySize,
-		TLSConfig:          options.TLSConfig,
-		Logger:             newLoggerBridge(srv.logCallback),
+		TLSConfig:          opts.TLSConfig,
+		Logger:             newSilentLogger(),
 		CloseOnShutdown:    true,
 	}
 
@@ -328,52 +313,52 @@ func (srv *Server) Stop() {
 }
 
 // Use adds a middleware that will be executed as part of the request handler
-func (srv *Server) Use(middleware MiddlewareFunc) {
+func (srv *Server) Use(middleware HandlerFunc) {
 	srv.middlewares = append(srv.middlewares, middleware)
 }
 
 // GET adds a GET handler for the specified route
-func (srv *Server) GET(path string, handler HandlerFunc, middlewares ...MiddlewareFunc) {
+func (srv *Server) GET(path string, handler HandlerFunc, middlewares ...HandlerFunc) {
 	srv.router.Handle("GET", path, srv.createEndpointHandler(handler, middlewares...))
 }
 
 // HEAD adds a HEAD handler for the specified route
-func (srv *Server) HEAD(path string, handler HandlerFunc, middlewares ...MiddlewareFunc) {
+func (srv *Server) HEAD(path string, handler HandlerFunc, middlewares ...HandlerFunc) {
 	srv.router.Handle("HEAD", path, srv.createEndpointHandler(handler, middlewares...))
 }
 
 // OPTIONS adds a OPTIONS handler for the specified route
-func (srv *Server) OPTIONS(path string, handler HandlerFunc, middlewares ...MiddlewareFunc) {
+func (srv *Server) OPTIONS(path string, handler HandlerFunc, middlewares ...HandlerFunc) {
 	srv.router.Handle("OPTIONS", path, srv.createEndpointHandler(handler, middlewares...))
 }
 
 // POST adds a POST handler for the specified route
-func (srv *Server) POST(path string, handler HandlerFunc, middlewares ...MiddlewareFunc) {
+func (srv *Server) POST(path string, handler HandlerFunc, middlewares ...HandlerFunc) {
 	srv.router.Handle("POST", path, srv.createEndpointHandler(handler, middlewares...))
 }
 
 // PUT adds a PUT handler for the specified route
-func (srv *Server) PUT(path string, handler HandlerFunc, middlewares ...MiddlewareFunc) {
+func (srv *Server) PUT(path string, handler HandlerFunc, middlewares ...HandlerFunc) {
 	srv.router.Handle("PUT", path, srv.createEndpointHandler(handler, middlewares...))
 }
 
 // PATCH adds a PATCH handler for the specified route
-func (srv *Server) PATCH(path string, handler HandlerFunc, middlewares ...MiddlewareFunc) {
+func (srv *Server) PATCH(path string, handler HandlerFunc, middlewares ...HandlerFunc) {
 	srv.router.Handle("PATCH", path, srv.createEndpointHandler(handler, middlewares...))
 }
 
 // DELETE adds a DELETE handler for the specified route
-func (srv *Server) DELETE(path string, handler HandlerFunc, middlewares ...MiddlewareFunc) {
+func (srv *Server) DELETE(path string, handler HandlerFunc, middlewares ...HandlerFunc) {
 	srv.router.Handle("DELETE", path, srv.createEndpointHandler(handler, middlewares...))
 }
 
 // CustomMethod adds a custom method handler for the specified route
-func (srv *Server) CustomMethod(method string, path string, handler HandlerFunc, middlewares ...MiddlewareFunc) {
+func (srv *Server) CustomMethod(method string, path string, handler HandlerFunc, middlewares ...HandlerFunc) {
 	srv.router.Handle(method, path, srv.createEndpointHandler(handler, middlewares...))
 }
 
 // ServeFiles adds custom filesystem handler for the specified route
-func (srv *Server) ServeFiles(path string, opts ServerFilesOptions, middlewares ...MiddlewareFunc) error {
+func (srv *Server) ServeFiles(path string, opts ServerFilesOptions, middlewares ...HandlerFunc) error {
 	var err error
 
 	// Check some options
@@ -393,7 +378,7 @@ func (srv *Server) ServeFiles(path string, opts ServerFilesOptions, middlewares 
 	}
 
 	// Create filesystem
-	fs := fasthttp.FS{
+	fileSys := fasthttp.FS{
 		FS:                 opts.FS,
 		Root:               opts.RootDirectory,
 		IndexNames:         indexNames,
@@ -405,7 +390,7 @@ func (srv *Server) ServeFiles(path string, opts ServerFilesOptions, middlewares 
 		SkipCache:          true,
 	}
 	if opts.NotFoundHandler != nil {
-		fs.PathNotFound = srv.createEndpointHandler(opts.NotFoundHandler)
+		fileSys.PathNotFound = srv.createEndpointHandler(opts.NotFoundHandler)
 	}
 
 	// If the url path contains a subdirectory within the base path, we must remove them in order to avoid mapping it
@@ -413,14 +398,12 @@ func (srv *Server) ServeFiles(path string, opts ServerFilesOptions, middlewares 
 	// '/foo/bar/index.html' would become '/tmp/public/foo/bar/index.html' instead of '/tmp/public/index.html'.
 	toStrip := strings.Count(path[:len(path)-(len(serveFilesSuffix)+1)], "/") // Exclude the last fragment
 	if toStrip > 0 {
-		fs.PathRewrite = fasthttp.NewPathSlashesStripper(toStrip)
+		fileSys.PathRewrite = fasthttp.NewPathSlashesStripper(toStrip)
 	}
 
-	// Create the FastHttp handler for the file system
-	fsHandler := fs.NewRequestHandler()
-
-	// Now our wrapper
-	handler := func(req *request.RequestContext) error {
+	// Wrap file-system handler
+	fsHandler := fileSys.NewRequestHandler()
+	handler := func(req *RequestContext) error {
 		req.CallFastHttpHandler(fsHandler)
 		return nil
 	}

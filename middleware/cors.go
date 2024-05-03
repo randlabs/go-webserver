@@ -6,9 +6,8 @@ import (
 	"strconv"
 	"strings"
 
-	webserver "github.com/randlabs/go-webserver"
-	"github.com/randlabs/go-webserver/request"
-	"github.com/randlabs/go-webserver/util"
+	webserver "github.com/randlabs/go-webserver/v2"
+	"github.com/randlabs/go-webserver/v2/util"
 )
 
 // -----------------------------------------------------------------------------
@@ -43,14 +42,18 @@ type CORSOptions struct {
 // -----------------------------------------------------------------------------
 
 // DefaultCORS creates a default CORS middleware that allows requests from anywhere
-func DefaultCORS() webserver.MiddlewareFunc {
+func DefaultCORS() webserver.HandlerFunc {
 	return NewCORS(CORSOptions{})
 }
 
 // NewCORS creates a new CORS middleware based on the specified options
-func NewCORS(opts CORSOptions) webserver.MiddlewareFunc {
+func NewCORS(opts CORSOptions) webserver.HandlerFunc {
+	var allowMethods []byte
 	var allowOrigins []string
 	var allowOriginPatterns []string
+	var exposeHeaders []byte
+	var allowHeaders []byte
+	var maxAge []byte
 
 	// Parse options
 	hasWildCardOrigin := true
@@ -74,128 +77,118 @@ func NewCORS(opts CORSOptions) webserver.MiddlewareFunc {
 		}
 	}
 
-	hasCustomAllowMethods := true
-	var allowMethods string
 	if len(opts.AllowMethods) > 0 {
-		allowMethods = strings.Join(opts.AllowMethods, ",")
+		allowMethods = util.UnsafeString2ByteSlice(strings.Join(opts.AllowMethods, ","))
 	} else {
-		hasCustomAllowMethods = false
-		allowMethods = http.MethodGet + "," + http.MethodHead + "," + http.MethodPut + "," + http.MethodPatch +
-			"," + http.MethodPost + "," + http.MethodDelete
+		allowMethods = util.UnsafeString2ByteSlice(
+			http.MethodGet + "," + http.MethodPost + "," + http.MethodHead + "," +
+				http.MethodPut + "," + http.MethodPatch + "," + http.MethodDelete,
+		)
 	}
-	allowHeaders := strings.Join(opts.AllowHeaders, ",")
-	exposeHeaders := strings.Join(opts.ExposeHeaders, ",")
-	maxAge := strconv.Itoa(opts.MaxAge)
+	if len(opts.AllowHeaders) > 0 {
+		allowHeaders = util.UnsafeString2ByteSlice(strings.Join(opts.AllowHeaders, ","))
+	}
+	if len(opts.ExposeHeaders) > 0 {
+		exposeHeaders = util.UnsafeString2ByteSlice(strings.Join(opts.ExposeHeaders, ","))
+	}
+	if opts.MaxAge > 0 {
+		maxAge = util.UnsafeString2ByteSlice(strconv.Itoa(opts.MaxAge))
+	}
 
 	// Setup middleware function
-	return func(next webserver.HandlerFunc) webserver.HandlerFunc {
-		return func(req *request.RequestContext) error {
-			origin := req.RequestHeader("origin")
-			allowOrigin := ""
+	return func(req *webserver.RequestContext) error {
+		origin := util.UnsafeByteSlice2String(req.RequestHeaders().PeekBytes(util.HeaderOrigin))
+		allowOrigin := ""
 
-			if len(origin) > 0 {
-				req.AddResponseHeader("Vary", origin)
-			}
-
-			// See https://developer.mozilla.org/en-US/docs/Glossary/Preflight_request for details on how to handle
-			// preflight request.
-			preflight := req.IsOptions()
-
-			// If the router set an allow methods
-			routerAllowMethods := ""
-			if preflight {
-				var ok bool
-
-				routerAllowMethods, ok = req.UserValue("routerAllow").(string)
-				if ok && len(routerAllowMethods) > 0 {
-					req.SetResponseHeader("Allow", routerAllowMethods)
-				} else {
-					routerAllowMethods = ""
-				}
-			}
-
-			// No origin provided?
-			if len(origin) == 0 {
-				if preflight {
-					return req.NoContent(http.StatusNoContent)
-				}
-				// Go to next middleware
-				return next(req)
-			}
-
-			// Check allowed origins
-			if hasWildCardOrigin {
-				if opts.AllowCredentials {
-					allowOrigin = origin
-				} else {
-					allowOrigin = "*"
-				}
-			}
-
-			if len(allowOrigin) == 0 {
-				for _, o := range allowOrigins {
-					if util.DoesSubdomainMatch(origin, o) {
-						allowOrigin = origin
-						break
-					}
-				}
-			}
-
-			if len(allowOrigin) == 0 && len(origin) <= (253+3+5) && strings.Contains(origin, "://") {
-				for _, re := range allowOriginPatterns {
-					if match, _ := regexp.MatchString(re, origin); match {
-						allowOrigin = origin
-						break
-					}
-				}
-			}
-
-			// Origin not allowed
-			if len(allowOrigin) == 0 {
-				if preflight {
-					return req.NoContent(http.StatusNoContent)
-				}
-				// Go to next middleware
-				return next(req)
-			}
-
-			req.SetResponseHeader("Access-Control-Allow-Origin", allowOrigin)
-			if opts.AllowCredentials {
-				req.SetResponseHeader("Access-Control-Allow-Credentials", "true")
-			}
-
-			// Simple request
-			if !preflight {
-				if len(exposeHeaders) > 0 {
-					req.SetResponseHeader("Access-Control-Expose-Headers", exposeHeaders)
-				}
-				// Go to next middleware
-				return next(req)
-			}
-
-			// Preflight request
-			req.AddResponseHeader("Vary", "Access-Control-Request-Method")
-			req.AddResponseHeader("Vary", "Access-Control-Request-Headers")
-
-			if !hasCustomAllowMethods && len(routerAllowMethods) > 0 {
-				req.SetResponseHeader("Access-Control-Allow-Methods", routerAllowMethods)
-			} else {
-				req.SetResponseHeader("Access-Control-Allow-Methods", allowMethods)
-			}
-
-			if len(allowHeaders) > 0 {
-				req.SetResponseHeader("Access-Control-Allow-Headers", allowHeaders)
-			} else {
-				header := req.RequestHeader("Access-Control-Request-Headers")
-				if len(header) > 0 {
-					req.SetResponseHeader("Access-Control-Allow-Headers", header)
-				}
-			}
-			if len(maxAge) > 0 {
-				req.SetResponseHeader("Access-Control-Max-Age", maxAge)
-			}
-
-			return req.NoContent(http.StatusNoContent)
+		if len(origin) > 0 {
+			req.ResponseHeaders().AddBytesKV(util.HeaderVary, util.HeaderOrigin)
 		}
+
+		// See https://developer.mozilla.org/en-US/docs/Glossary/Preflight_request for details on how to handle
+		// preflight request.
+		preflight := req.IsOptions()
+
+		// No origin provided?
+		if len(origin) == 0 {
+			if preflight {
+				req.NoContent(http.StatusNoContent)
+				return nil
+			}
+			// Go to next middleware
+			return req.Next()
+		}
+
+		// Check allowed origins
+		if hasWildCardOrigin {
+			if opts.AllowCredentials {
+				allowOrigin = origin
+			} else {
+				allowOrigin = "*"
+			}
+		}
+
+		if len(allowOrigin) == 0 {
+			for _, o := range allowOrigins {
+				if util.DoesSubdomainMatch(origin, o) {
+					allowOrigin = origin
+					break
+				}
+			}
+		}
+
+		if len(allowOrigin) == 0 && len(origin) <= (253+3+5) && strings.Contains(origin, "://") {
+			for _, re := range allowOriginPatterns {
+				if match, _ := regexp.MatchString(re, origin); match {
+					allowOrigin = origin
+					break
+				}
+			}
+		}
+
+		// Origin not allowed
+		if len(allowOrigin) == 0 {
+			if preflight {
+				req.NoContent(http.StatusNoContent)
+				return nil
+			}
+			// Go to next middleware
+			return req.Next()
+		}
+
+		respHdrs := req.ResponseHeaders()
+
+		respHdrs.SetBytesK(util.HeaderAccessControlAllowOrigin, allowOrigin)
+		if opts.AllowCredentials {
+			respHdrs.SetBytesKV(util.HeaderAccessControlAllowCredentials, util.BytesTrue)
+		}
+
+		// Simple request
+		if !preflight {
+			if exposeHeaders != nil {
+				respHdrs.SetBytesKV(util.HeaderAccessControlExposeHeaders, exposeHeaders)
+			}
+			// Go to next middleware
+			return req.Next()
+		}
+
+		// Preflight request
+		respHdrs.AddBytesKV(util.HeaderVary, util.HeaderAccessControlRequestMethod)
+		respHdrs.AddBytesKV(util.HeaderVary, util.HeaderAccessControlRequestHeaders)
+		respHdrs.SetBytesKV(util.HeaderAccessControlAllowMethods, allowMethods)
+		if allowHeaders != nil {
+			respHdrs.SetBytesKV(util.HeaderAccessControlAllowHeaders, allowHeaders)
+		} else {
+			header := req.RequestHeaders().PeekBytes(util.HeaderAccessControlRequestHeaders)
+			if len(header) > 0 {
+				respHdrs.SetBytesKV(util.HeaderAccessControlAllowHeaders, header)
+			}
+		}
+		if maxAge != nil {
+			respHdrs.SetBytesKV(util.HeaderAccessControlMaxAge, maxAge)
+		}
+
+		// Done
+		req.NoContent(http.StatusNoContent)
+		return nil
 	}
 }
