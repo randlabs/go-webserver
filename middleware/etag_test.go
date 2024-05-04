@@ -11,7 +11,7 @@ import (
 
 // -----------------------------------------------------------------------------
 
-func TestEtag(t *testing.T) {
+func TestMiddlewareEtag(t *testing.T) {
 	var statusCode int
 
 	//Create server

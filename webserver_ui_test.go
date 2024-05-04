@@ -1,5 +1,3 @@
-//go:build ui_test
-
 package go_webserver_test
 
 import (
@@ -27,7 +25,7 @@ func TestWebServerUI(t *testing.T) {
 		// Add public files to server
 		err := srv.ServeFiles("/", webserver.ServerFilesOptions{
 			RootDirectory: helpers_test.GetWorkingDirectory(t) + "testdata/public",
-		})
+		}, middleware.NewCompression(middleware.CompressionLevelDefault))
 		if err != nil {
 			return err
 		}

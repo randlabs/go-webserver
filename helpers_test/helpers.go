@@ -49,6 +49,7 @@ func RunWebServer(t *testing.T, initCB func(srv *webserver.Server) error) *TestW
 	}
 
 	// Add some dummy endpoints
+	tws.Server.OPTIONS("/api/version", renderApiVersion)
 	tws.Server.GET("/api/version", renderApiVersion)
 	tws.Server.POST("/api/version", renderApiVersion)
 
@@ -161,7 +162,6 @@ func renderApiVersion(req *webserver.RequestContext) error {
 		body := req.PostBody()
 		if body != nil {
 			if json.Unmarshal(body, &decodedBody) == nil {
-
 				value, ok := decodedBody["some-key"]
 				if ok {
 

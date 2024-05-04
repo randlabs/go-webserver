@@ -385,9 +385,6 @@ func (srv *Server) ServeFiles(path string, opts ServerFilesOptions, middlewares 
 		GenerateIndexPages: !opts.DisableDefaultIndexPages,
 		AcceptByteRange:    opts.AcceptByteRange,
 		PathNotFound:       srv.router.NotFound,
-		Compress:           true,
-		CompressBrotli:     true,
-		SkipCache:          true,
 	}
 	if opts.NotFoundHandler != nil {
 		fileSys.PathNotFound = srv.createEndpointHandler(opts.NotFoundHandler)

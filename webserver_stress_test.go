@@ -2,9 +2,11 @@ package go_webserver_test
 
 import (
 	"context"
+	"errors"
 	"runtime"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"testing"
 	"time"
 
@@ -42,7 +44,17 @@ func TestWebServerStress(t *testing.T) {
 				if err == nil {
 					atomic.AddInt32(&successCounter, 1)
 				} else {
-					atomic.AddInt32(&failCounter, 1)
+					var osErr syscall.Errno
+
+					ignoreError := false
+					if errors.As(err, &osErr) {
+						if osErr == 10048 || osErr == 98 { // WSAEADDRINUSE || EADDRINUSE
+							ignoreError = true
+						}
+					}
+					if !ignoreError {
+						atomic.AddInt32(&failCounter, 1)
+					}
 				}
 
 				select {

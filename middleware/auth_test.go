@@ -12,7 +12,7 @@ import (
 
 // -----------------------------------------------------------------------------
 
-func TestAuth(t *testing.T) {
+func TestMiddlewareAuth(t *testing.T) {
 	var statusCode int
 
 	//Create server

@@ -12,7 +12,7 @@ import (
 
 // -----------------------------------------------------------------------------
 
-func TestRateLimiter(t *testing.T) {
+func TestMiddlewareRateLimiter(t *testing.T) {
 	//Create server
 	srv := helpers_test.RunWebServer(t, func(srv *webserver.Server) error {
 		// Add some middlewares

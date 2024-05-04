@@ -37,10 +37,10 @@ $(function () {
         $.ajax({
             url: url + "/api/version",
             type: "POST",
-            data: "<emptyxml></emptyxml>",
+            data: JSON.stringify({ "some-key": "some-value" }),
             dataType: "json",
+            contentType: "application/json; charset=UTF-8",
             headers: {
-                "Content-Type": "text/xml; charset=utf-8",
                 "X-PingOther": "pingpong"
             }
         }).done(function(data) {
