@@ -49,7 +49,6 @@ func RunWebServer(t *testing.T, initCB func(srv *webserver.Server) error) *TestW
 	}
 
 	// Add some dummy endpoints
-	tws.Server.OPTIONS("/api/version", renderApiVersion)
 	tws.Server.GET("/api/version", renderApiVersion)
 	tws.Server.POST("/api/version", renderApiVersion)
 
@@ -139,8 +138,8 @@ func QueryApiVersion(doPost bool, queryParams map[string]string, headers http.He
 	return resp.StatusCode, resp.Header, nil
 }
 
-func OpenBrowser() {
-	rawUrl := "http://127.0.0.1:3000/"
+func OpenBrowser(path string) {
+	rawUrl := "http://127.0.0.1:3000" + path
 	switch runtime.GOOS {
 	case "linux":
 		_ = exec.Command("xdg-open", rawUrl).Start()
