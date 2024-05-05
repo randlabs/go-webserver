@@ -1,19 +1,16 @@
 package middleware
 
 import (
-	webserver "github.com/randlabs/go-webserver"
-	"github.com/randlabs/go-webserver/request"
+	webserver "github.com/randlabs/go-webserver/v2"
 )
 
 // -----------------------------------------------------------------------------
 
 // NewNoOP creates a no-operation middleware
-func NewNoOP() webserver.MiddlewareFunc {
+func NewNoOP() webserver.HandlerFunc {
 	// Setup middleware function
-	return func(next webserver.HandlerFunc) webserver.HandlerFunc {
-		return func(req *request.RequestContext) error {
-			// Go to next middleware
-			return next(req)
-		}
+	return func(req *webserver.RequestContext) error {
+		// Go to next middleware
+		return req.Next()
 	}
 }

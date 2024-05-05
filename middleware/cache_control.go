@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	webserver "github.com/randlabs/go-webserver"
-	"github.com/randlabs/go-webserver/request"
+	webserver "github.com/randlabs/go-webserver/v2"
+	"github.com/randlabs/go-webserver/v2/util"
 )
 
 // -----------------------------------------------------------------------------
@@ -28,7 +28,7 @@ type CacheControlOptions struct {
 // -----------------------------------------------------------------------------
 
 // DisableClientCache creates a default cache control middleware that disables the client's cache
-func DisableClientCache() webserver.MiddlewareFunc {
+func DisableClientCache() webserver.HandlerFunc {
 	var zero uint32
 
 	return NewCacheControl(CacheControlOptions{
@@ -43,58 +43,61 @@ func DisableClientCache() webserver.MiddlewareFunc {
 }
 
 // NewCacheControl creates a new client cache control middleware based on the specified options
-func NewCacheControl(opts CacheControlOptions) webserver.MiddlewareFunc {
-	// Build header content
-	cacheValue := make([]string, 0)
+func NewCacheControl(opts CacheControlOptions) webserver.HandlerFunc {
+	var finalCacheValue []byte
 
+	// Build header content
+	sb := strings.Builder{}
 	if opts.Public {
-		cacheValue = append(cacheValue, "public")
+		_, _ = sb.WriteString(",public")
 	}
 	if opts.Private {
-		cacheValue = append(cacheValue, "private")
+		_, _ = sb.WriteString(",private")
 	}
 
 	if opts.NoCache {
-		cacheValue = append(cacheValue, "no-cache")
+		_, _ = sb.WriteString(",no-cache")
 	}
 	if opts.NoStore {
-		cacheValue = append(cacheValue, "no-store")
+		_, _ = sb.WriteString(",no-store")
 	}
 	if opts.NoTransform {
-		cacheValue = append(cacheValue, "no-transform")
+		_, _ = sb.WriteString(",no-transform")
 	}
 
 	if opts.MustRevalidate {
-		cacheValue = append(cacheValue, "must-revalidate")
+		_, _ = sb.WriteString(",must-revalidate")
 	}
 	if opts.ProxyRevalidate {
-		cacheValue = append(cacheValue, "proxy-revalidate")
+		_, _ = sb.WriteString(",proxy-revalidate")
 	}
 
 	if opts.MaxAgeInSeconds != nil {
-		cacheValue = append(cacheValue, fmt.Sprintf("max-age=%v", *opts.MaxAgeInSeconds))
+		_, _ = sb.WriteString(fmt.Sprintf(",max-age=%v", *opts.MaxAgeInSeconds))
 	}
 	if opts.SharedMaxAgeInSeconds != nil {
-		cacheValue = append(cacheValue, fmt.Sprintf("s-maxage=%v", *opts.SharedMaxAgeInSeconds))
+		_, _ = sb.WriteString(fmt.Sprintf(",s-maxage=%v", *opts.SharedMaxAgeInSeconds))
 	}
 	if opts.StaleWhileRevalidateInSeconds != nil {
-		cacheValue = append(cacheValue, fmt.Sprintf("stale-if-error=%v", *opts.StaleWhileRevalidateInSeconds))
+		_, _ = sb.WriteString(fmt.Sprintf(",stale-if-error=%v", *opts.StaleWhileRevalidateInSeconds))
 	}
 	if opts.StaleIfErrorInSeconds != nil {
-		cacheValue = append(cacheValue, fmt.Sprintf("stale-while-revalidate=%v", *opts.StaleIfErrorInSeconds))
+		_, _ = sb.WriteString(fmt.Sprintf(",stale-while-revalidate=%v", *opts.StaleIfErrorInSeconds))
 	}
 
-	finalCacheValue := strings.Join(cacheValue, ",")
+	if sb.Len() > 0 {
+		finalCacheValue = util.UnsafeString2ByteSlice(sb.String())[1:]
+	} else {
+		finalCacheValue = make([]byte, 0)
+	}
 
 	// Setup middleware function
-	return func(next webserver.HandlerFunc) webserver.HandlerFunc {
-		return func(req *request.RequestContext) error {
-			// Set cache control header
-			req.SetResponseHeader("Cache-Control", finalCacheValue)
+	return func(req *webserver.RequestContext) error {
+		// Set cache control header
+		req.ResponseHeaders().SetBytesKV(util.HeaderCacheControl, finalCacheValue)
 
-			// Go to next middleware
-			return next(req)
-		}
+		// Go to next middleware
+		return req.Next()
 	}
 }
 

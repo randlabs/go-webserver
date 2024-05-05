@@ -13,9 +13,8 @@ import (
 	"os/signal"
 	"syscall"
 
-	webserver "github.com/randlabs/go-webserver"
-	"github.com/randlabs/go-webserver/middleware"
-	"github.com/randlabs/go-webserver/request"
+	webserver "github.com/randlabs/go-webserver/v2"
+	"github.com/randlabs/go-webserver/v2/middleware"
 )
 
 type testApiOutput struct {
@@ -59,7 +58,7 @@ func main() {
 	srv.Stop()
 }
 
-func getTestApi(req *request.RequestContext) error {
+func getTestApi(req *webserver.RequestContext) error {
 	// Prepare output
 	output := testApiOutput{
 		Status: "all systems operational",
