@@ -248,7 +248,7 @@ func Create(opts Options) (*Server, error) {
 	// Create FastHTTP server
 	srv.fastserver = fasthttp.Server{
 		Name:               serverName,
-		Handler:            srv.router.Handler,
+		Handler:            srv.createMainHandler(),
 		ReadTimeout:        readTimeout,
 		WriteTimeout:       writeTimeout,
 		Concurrency:        opts.Concurrency,
@@ -367,10 +367,11 @@ func (srv *Server) ServeFiles(path string, opts ServerFilesOptions, middlewares 
 	}
 
 	// Normalize path
-	path, err = util.SanitizeUrlPath(path + "/" + serveFilesSuffix)
+	path, err = util.SanitizeUrlPath(path, 1)
 	if err != nil {
 		return err
 	}
+	path += serveFilesSuffix
 
 	indexNames := make([]string, 0)
 	if !opts.DisableDefaultIndexPages {

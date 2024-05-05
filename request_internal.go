@@ -9,6 +9,12 @@ import (
 
 // -----------------------------------------------------------------------------
 
+const (
+	reqContextLinkKey = "\xFF\xFF**reqContextLinkKey"
+)
+
+// -----------------------------------------------------------------------------
+
 func (req *RequestContext) sendError(statusCode int, msg string) {
 	if !req.IsHead() {
 		if len(msg) == 0 {

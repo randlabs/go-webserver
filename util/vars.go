@@ -24,6 +24,7 @@ var (
 	HeaderContentSecurityPolicy              = []byte("Content-Security-Policy")
 	HeaderContentSecurityPolicyReportOnly    = []byte("Content-Security-Policy-Report-Only")
 	HeaderContentType                        = []byte("Content-Type")
+	HeaderContentLength                      = []byte("Content-Length")
 	HeaderETag                               = []byte("Etag")
 	HeaderHeaderRetryAfter                   = []byte("Retry-After")
 	HeaderIfNoneMatch                        = []byte("If-None-Match")

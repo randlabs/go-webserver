@@ -25,6 +25,7 @@ var (
 		util.HeaderAccessControlAllowOrigin,
 	}
 
+	errPathNotHanlded    = errors.New("path not handled")
 	errInvalidCallToNext = errors.New("invalid call to Next")
 )
 
@@ -35,12 +36,13 @@ type RequestContext struct {
 	tp      *trusted_proxy.TrustedProxy
 	userCtx context.Context
 
-	middlewareIndex     int
-	srvMiddlewares      []HandlerFunc
-	middlewares         []HandlerFunc
-	srvMiddlewaresLen   int
-	totalMiddlewaresLen int
-	handler             HandlerFunc
+	middlewareIndex   int
+	srvRouterHandler  fasthttp.RequestHandler
+	srvMiddlewares    []HandlerFunc
+	srvMiddlewaresLen int
+	middlewares       []HandlerFunc
+	middlewaresLen    int
+	handler           HandlerFunc
 }
 
 // -----------------------------------------------------------------------------
@@ -222,17 +224,32 @@ func (req *RequestContext) Next() error {
 	var err error
 
 	req.middlewareIndex += 1
+
 	if req.middlewareIndex <= req.srvMiddlewaresLen {
 		err = req.srvMiddlewares[req.middlewareIndex-1](req)
-	} else if req.middlewareIndex <= req.totalMiddlewaresLen {
-		err = req.middlewares[req.middlewareIndex-req.srvMiddlewaresLen-1](req)
-	} else if req.middlewareIndex == req.totalMiddlewaresLen+1 {
+	} else if req.middlewareIndex == req.srvMiddlewaresLen+1 {
+		req.srvRouterHandler(req.ctx)
+		if req.handler != nil {
+			err = req.Next()
+		} else {
+			err = errPathNotHanlded
+		}
+	} else if req.middlewareIndex <= req.srvMiddlewaresLen+1+req.middlewaresLen {
+		err = req.middlewares[req.middlewareIndex-req.srvMiddlewaresLen-2](req)
+	} else if req.middlewareIndex == req.srvMiddlewaresLen+2+req.middlewaresLen {
 		err = req.handler(req)
 	} else {
 		err = errInvalidCallToNext
 	}
+
 	req.middlewareIndex -= 1
 
 	// DOne
 	return err
+}
+
+func (req *RequestContext) setHandlerParams(h HandlerFunc, middlewares []HandlerFunc) {
+	req.handler = h
+	req.middlewares = middlewares
+	req.middlewaresLen = len(middlewares)
 }

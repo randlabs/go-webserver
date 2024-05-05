@@ -36,7 +36,7 @@ func TestWebServerUI(t *testing.T) {
 	defer srv.Stop()
 
 	// Open default browser
-	helpers_test.OpenBrowser()
+	helpers_test.OpenBrowser("/")
 
 	// Wait for CTRL+C
 	fmt.Println("Server running. Press CTRL+C to stop.")

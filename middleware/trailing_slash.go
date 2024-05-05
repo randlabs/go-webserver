@@ -1,8 +1,6 @@
 package middleware
 
 import (
-	"bytes"
-
 	webserver "github.com/randlabs/go-webserver/v2"
 	"github.com/randlabs/go-webserver/v2/util"
 )
@@ -13,10 +11,10 @@ import (
 type TrailingSlashOptions struct {
 	// Remove tells the middleware to remove trailing slashes if present.
 	// If this setting is false, then the trailing slash is added if absent.
-	Remove bool `json:"remove,omitempty"`
+	Remove bool
 
 	// RedirectCode, if not zero, will make the middleware to return a redirect response.
-	RedirectCode uint `json:"redirectCode,omitempty"`
+	RedirectCode uint
 }
 
 // -----------------------------------------------------------------------------
@@ -28,26 +26,25 @@ func NewTrailingSlash(opts TrailingSlashOptions) webserver.HandlerFunc {
 		uri := req.URI()
 
 		// Check if the path contains (or not) the trailing slash
-		modified := false
+		modify := 0
 		path := uri.Path()
+		pathLen := len(path)
 		if opts.Remove {
-			if bytes.HasSuffix(path, []byte{47}) {
-				path = bytes.TrimRight(path, "/\\")
-				modified = true
+			if pathLen > 1 && (path[pathLen-1] == 47 || path[pathLen-1] == 92) {
+				modify = -1
 			}
 		} else {
-			if !bytes.HasSuffix(path, []byte{47}) {
-				path = append(path, '/')
-				modified = true
+			if pathLen == 0 || (path[pathLen-1] != 47 && path[pathLen-1] != 92) {
+				modify = 1
 			}
 		}
-		if modified {
-			strPath, err := util.SanitizeUrlPath(util.UnsafeByteSlice2String(path))
+		if modify != 0 {
+			newPath, err := util.SanitizeUrlPath(util.UnsafeByteSlice2String(path), modify)
 			if err != nil {
 				req.BadRequest(err.Error())
 				return nil
 			}
-			uri.SetPath(strPath)
+			uri.SetPath(newPath)
 
 			// Redirect
 			if opts.RedirectCode != 0 {
