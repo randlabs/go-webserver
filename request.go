@@ -248,8 +248,15 @@ func (req *RequestContext) Next() error {
 	return err
 }
 
-func (req *RequestContext) setHandlerParams(h HandlerFunc, middlewares []HandlerFunc) {
-	req.handler = h
-	req.middlewares = middlewares
-	req.middlewaresLen = len(middlewares)
+func (req *RequestContext) UserValueAsString(key []byte) (string, bool) {
+	value := req.ctx.UserValueBytes(key)
+	if value != nil {
+		switch v := value.(type) {
+		case string:
+			return v, true
+		case []byte:
+			return string(v), true
+		}
+	}
+	return "", false
 }

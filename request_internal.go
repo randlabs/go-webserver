@@ -33,6 +33,12 @@ func (req *RequestContext) isProxyTrusted() bool {
 	return req.tp.IsIpTrusted(req.ctx.RemoteIP())
 }
 
+func (req *RequestContext) setHandlerParams(h HandlerFunc, middlewares []HandlerFunc) {
+	req.handler = h
+	req.middlewares = middlewares
+	req.middlewaresLen = len(middlewares)
+}
+
 // -----------------------------------------------------------------------------
 
 func getFirstIpAddress(header []byte) net.IP {
