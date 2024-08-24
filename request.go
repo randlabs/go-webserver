@@ -187,7 +187,10 @@ func (req *RequestContext) RemoteIP() net.IP {
 			addresses = req.ctx.Request.Header.PeekBytes(util.HeaderXForwardedFor)
 		}
 		if len(addresses) > 0 {
-			return getFirstIpAddress(addresses)
+			ip := getFirstIpAddress(addresses)
+			if ip != nil {
+				return ip
+			}
 		}
 	}
 	return req.ctx.RemoteIP()
