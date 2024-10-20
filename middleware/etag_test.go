@@ -1,12 +1,14 @@
+// See the LICENSE file for license details.
+
 package middleware_test
 
 import (
 	"net/http"
 	"testing"
 
-	webserver "github.com/randlabs/go-webserver/v2"
-	"github.com/randlabs/go-webserver/v2/helpers_test"
-	"github.com/randlabs/go-webserver/v2/middleware"
+	webserver "github.com/mxmauro/go-webserver/v2"
+	"github.com/mxmauro/go-webserver/v2/internal/testcommon"
+	"github.com/mxmauro/go-webserver/v2/middleware"
 )
 
 // -----------------------------------------------------------------------------
@@ -15,7 +17,7 @@ func TestMiddlewareEtag(t *testing.T) {
 	var statusCode int
 
 	//Create server
-	srv := helpers_test.RunWebServer(t, func(srv *webserver.Server) error {
+	srv := testcommon.RunWebServer(t, func(srv *webserver.Server) error {
 		// Add some middlewares
 		srv.Use(middleware.NewETag(false))
 
@@ -25,7 +27,7 @@ func TestMiddlewareEtag(t *testing.T) {
 	defer srv.Stop()
 
 	// Query api for the first time
-	_, headers, err := helpers_test.QueryApiVersion(false, nil, nil, []int{200})
+	_, headers, err := testcommon.QueryApiVersion(false, nil, nil, []int{200})
 	if err != nil {
 		t.Fatalf("unable to query api [%v]", err)
 	}
@@ -35,7 +37,7 @@ func TestMiddlewareEtag(t *testing.T) {
 	}
 
 	// Query it again and expect not modified
-	statusCode, _, err = helpers_test.QueryApiVersion(false, nil, http.Header{
+	statusCode, _, err = testcommon.QueryApiVersion(false, nil, http.Header{
 		"If-None-Match": []string{etag},
 	}, []int{304})
 

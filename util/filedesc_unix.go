@@ -1,3 +1,5 @@
+// See the LICENSE file for license details.
+
 //go:build unix
 
 package util

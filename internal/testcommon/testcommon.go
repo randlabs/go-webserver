@@ -1,4 +1,6 @@
-package helpers_test
+// See the LICENSE file for license details.
+
+package testcommon
 
 import (
 	"bytes"
@@ -15,8 +17,8 @@ import (
 	"testing"
 	"time"
 
-	webserver "github.com/randlabs/go-webserver/v2"
-	"github.com/randlabs/go-webserver/v2/util"
+	webserver "github.com/mxmauro/go-webserver/v2"
+	"github.com/mxmauro/go-webserver/v2/util"
 )
 
 // -----------------------------------------------------------------------------

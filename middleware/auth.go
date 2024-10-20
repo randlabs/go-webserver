@@ -7,8 +7,8 @@ import (
 	"net/url"
 	"strings"
 
-	webserver "github.com/randlabs/go-webserver/v2"
-	"github.com/randlabs/go-webserver/v2/util"
+	webserver "github.com/mxmauro/go-webserver/v2"
+	"github.com/mxmauro/go-webserver/v2/util"
 )
 
 // -----------------------------------------------------------------------------

@@ -1,3 +1,5 @@
+// See the LICENSE file for license details.
+
 package middleware
 
 import (
@@ -7,8 +9,8 @@ import (
 	"strconv"
 	"strings"
 
-	webserver "github.com/randlabs/go-webserver/v2"
-	"github.com/randlabs/go-webserver/v2/util"
+	webserver "github.com/mxmauro/go-webserver/v2"
+	"github.com/mxmauro/go-webserver/v2/util"
 	"github.com/valyala/fasthttp"
 )
 

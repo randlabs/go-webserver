@@ -1,3 +1,5 @@
+// See the LICENSE file for license details.
+
 package middleware_test
 
 import (
@@ -5,16 +7,16 @@ import (
 	"testing"
 	"time"
 
-	webserver "github.com/randlabs/go-webserver/v2"
-	"github.com/randlabs/go-webserver/v2/helpers_test"
-	"github.com/randlabs/go-webserver/v2/middleware"
+	webserver "github.com/mxmauro/go-webserver/v2"
+	"github.com/mxmauro/go-webserver/v2/internal/testcommon"
+	"github.com/mxmauro/go-webserver/v2/middleware"
 )
 
 // -----------------------------------------------------------------------------
 
 func TestMiddlewareRateLimiter(t *testing.T) {
 	//Create server
-	srv := helpers_test.RunWebServer(t, func(srv *webserver.Server) error {
+	srv := testcommon.RunWebServer(t, func(srv *webserver.Server) error {
 		// Add some middlewares
 		srv.Use(middleware.NewRateLimiter(middleware.RateLimiterOptions{
 			Max:                5,
@@ -32,7 +34,7 @@ func TestMiddlewareRateLimiter(t *testing.T) {
 	defer srv.Stop()
 
 	for count := 1; count <= 5; count++ {
-		_, headers, err := helpers_test.QueryApiVersion(false, nil, nil, []int{200})
+		_, headers, err := testcommon.QueryApiVersion(false, nil, nil, []int{200})
 		if err != nil {
 			t.Fatalf("unable to query api [%v]", err)
 		}
@@ -48,7 +50,7 @@ func TestMiddlewareRateLimiter(t *testing.T) {
 		// rateLimitReset := headers.Get("X-Rate-Limit-Reset")
 	}
 
-	statusCode, headers, err := helpers_test.QueryApiVersion(false, nil, nil, []int{429})
+	statusCode, headers, err := testcommon.QueryApiVersion(false, nil, nil, []int{429})
 	if err != nil {
 		if statusCode == 0 {
 			t.Fatalf("unable to query api with wrong header [%v]", err)

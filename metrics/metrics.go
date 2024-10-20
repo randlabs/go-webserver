@@ -1,3 +1,5 @@
+// See the LICENSE file for license details.
+
 package metrics
 
 // -----------------------------------------------------------------------------
@@ -9,18 +11,18 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/mxmauro/go-rundownprotection"
+	webserver "github.com/mxmauro/go-webserver/v2"
+	"github.com/mxmauro/go-webserver/v2/middleware"
+	"github.com/mxmauro/go-webserver/v2/util"
 	"github.com/prometheus/client_golang/prometheus"
-	webserver "github.com/randlabs/go-webserver/v2"
-	"github.com/randlabs/go-webserver/v2/middleware"
-	"github.com/randlabs/go-webserver/v2/util"
-	"github.com/randlabs/rundown-protection"
 )
 
 // -----------------------------------------------------------------------------
 
 // Controller holds details about a metrics monitor instance.
 type Controller struct {
-	rp                  *rundown_protection.RundownProtection
+	rp                  *rundownprotection.RundownProtection
 	server              *webserver.Server
 	usingInternalServer bool
 	registry            *prometheus.Registry
@@ -92,7 +94,7 @@ func CreateController(opts Options) (*Controller, error) {
 
 	// Create metrics object
 	mws := Controller{
-		rp:             rundown_protection.Create(),
+		rp:             rundownprotection.Create(),
 		healthCallback: opts.HealthCallback,
 	}
 

@@ -10,8 +10,8 @@ import (
 	"net"
 	"strings"
 
-	"github.com/randlabs/go-webserver/v2/trusted_proxy"
-	"github.com/randlabs/go-webserver/v2/util"
+	"github.com/mxmauro/go-webserver/v2/trusted_proxy"
+	"github.com/mxmauro/go-webserver/v2/util"
 	"github.com/valyala/fasthttp"
 )
 
@@ -232,10 +232,13 @@ func (req *RequestContext) Next() error {
 		err = req.srvMiddlewares[req.middlewareIndex-1](req)
 	} else if req.middlewareIndex == req.srvMiddlewaresLen+1 {
 		req.srvRouterHandler(req.ctx)
-		if req.handler != nil {
-			err = req.Next()
-		} else {
-			err = errPathNotHanlded
+		// If the status code is different from OK, assume someone created a response, for e.g., a redirection.
+		if req.ResponseHeaders().StatusCode() == 200 {
+			if req.handler != nil {
+				err = req.Next()
+			} else {
+				err = errPathNotHanlded
+			}
 		}
 	} else if req.middlewareIndex <= req.srvMiddlewaresLen+1+req.middlewaresLen {
 		err = req.middlewares[req.middlewareIndex-req.srvMiddlewaresLen-2](req)
