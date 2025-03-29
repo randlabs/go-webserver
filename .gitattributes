@@ -9,6 +9,15 @@ LICENSE text eol=lf
 # Windows forced line-endings
 /.idea/* text eol=crlf
 
+# Remove flamegraph source code from archives
+# /ui/flamegraph/*.md export-ignore
+# /ui/flamegraph/*.html export-ignore
+# /ui/flamegraph/*.cjs export-ignore
+# /ui/flamegraph/*.js export-ignore
+# /ui/flamegraph/*.json export-ignore
+# /ui/flamegraph/src/ export-ignore
+# /ui/flamegraph/public/ export-ignore
+
 #
 ## These files are binary and should be left untouched
 #

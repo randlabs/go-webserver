@@ -1,7 +1,10 @@
+// See the LICENSE file for license details.
+
 package go_webserver
 
 import (
 	"crypto/tls"
+	"embed"
 	"errors"
 	"io/fs"
 	"net"
@@ -13,8 +16,8 @@ import (
 	"time"
 
 	"github.com/fasthttp/router"
-	"github.com/randlabs/go-webserver/v2/trusted_proxy"
-	"github.com/randlabs/go-webserver/v2/util"
+	"github.com/mxmauro/go-webserver/v2/trusted_proxy"
+	"github.com/mxmauro/go-webserver/v2/util"
 	"github.com/valyala/fasthttp"
 )
 
@@ -127,7 +130,8 @@ type ServerFilesOptions struct {
 	NotFoundHandler HandlerFunc
 
 	// File-system to use. Defaults to the OS file-system.
-	FS fs.FS
+	FS         fs.FS
+	FSBasePath string
 }
 
 // -----------------------------------------------------------------------------
@@ -360,10 +364,18 @@ func (srv *Server) CustomMethod(method string, path string, handler HandlerFunc,
 // ServeFiles adds custom filesystem handler for the specified route
 func (srv *Server) ServeFiles(path string, opts ServerFilesOptions, middlewares ...HandlerFunc) error {
 	var err error
+	var isEmbedFS bool
+
+	// Check if the provided filesystem is embedded
+	if opts.FS != nil {
+		_, isEmbedFS = opts.FS.(embed.FS)
+	}
 
 	// Check some options
-	if !filepath.IsAbs(opts.RootDirectory) {
-		return errors.New("absolute path must be provided")
+	if !isEmbedFS {
+		if !filepath.IsAbs(opts.RootDirectory) {
+			return errors.New("absolute path must be provided")
+		}
 	}
 
 	// Normalize path
@@ -379,7 +391,7 @@ func (srv *Server) ServeFiles(path string, opts ServerFilesOptions, middlewares 
 	}
 
 	// Create filesystem
-	fileSys := fasthttp.FS{
+	fs := fasthttp.FS{
 		FS:                 opts.FS,
 		Root:               opts.RootDirectory,
 		IndexNames:         indexNames,
@@ -388,7 +400,7 @@ func (srv *Server) ServeFiles(path string, opts ServerFilesOptions, middlewares 
 		PathNotFound:       srv.router.NotFound,
 	}
 	if opts.NotFoundHandler != nil {
-		fileSys.PathNotFound = srv.createEndpointHandler(opts.NotFoundHandler)
+		fs.PathNotFound = srv.createEndpointHandler(opts.NotFoundHandler)
 	}
 
 	// If the url path contains a subdirectory within the base path, we must remove them in order to avoid mapping it
@@ -396,11 +408,37 @@ func (srv *Server) ServeFiles(path string, opts ServerFilesOptions, middlewares 
 	// '/foo/bar/index.html' would become '/tmp/public/foo/bar/index.html' instead of '/tmp/public/index.html'.
 	toStrip := strings.Count(path[:len(path)-(len(serveFilesSuffix)+1)], "/") // Exclude the last fragment
 	if toStrip > 0 {
-		fileSys.PathRewrite = fasthttp.NewPathSlashesStripper(toStrip)
+		fs.PathRewrite = fasthttp.NewPathSlashesStripper(toStrip)
+	}
+
+	if opts.FS != nil && len(opts.FSBasePath) > 0 {
+		var basePath []byte
+
+		if !strings.HasPrefix(opts.FSBasePath, "/") {
+			basePath = append([]byte("/"), []byte(opts.FSBasePath)...)
+		} else {
+			basePath = []byte(opts.FSBasePath)
+		}
+		if len(basePath) > 0 && basePath[len(basePath)-1] == '/' {
+			basePath = basePath[:len(basePath)-1]
+		}
+
+		// Create a new path rewrite function
+		origPathRewrite := fs.PathRewrite
+		fs.PathRewrite = func(ctx *fasthttp.RequestCtx) []byte {
+			var newPath []byte
+
+			if origPathRewrite != nil {
+				newPath = origPathRewrite(ctx)
+			} else {
+				newPath = ctx.Path()
+			}
+			return append(basePath, newPath...)
+		}
 	}
 
 	// Wrap file-system handler
-	fsHandler := fileSys.NewRequestHandler()
+	fsHandler := fs.NewRequestHandler()
 	handler := func(req *RequestContext) error {
 		req.CallFastHttpHandler(fsHandler)
 		return nil

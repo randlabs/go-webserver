@@ -1,9 +1,11 @@
+// See the LICENSE file for license details.
+
 package metrics
 
 import (
 	"net/http"
 
-	webserver "github.com/randlabs/go-webserver/v2"
+	webserver "github.com/mxmauro/go-webserver/v2"
 )
 
 // -----------------------------------------------------------------------------

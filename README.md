@@ -2,6 +2,11 @@
 
 HTTP web server library for Go based on FastHttp
 
+##### NOTE:
+
+* This is a fork of the original [RandLabs.IO's webserver library](https://github.com/randlabs/go-webserver).
+  May contain some modified functionality.
+
 ## Usage with example
 
 ```golang
@@ -13,8 +18,8 @@ import (
 	"os/signal"
 	"syscall"
 
-	webserver "github.com/randlabs/go-webserver/v2"
-	"github.com/randlabs/go-webserver/v2/middleware"
+	webserver "github.com/mxmauro/go-webserver/v2"
+	"github.com/mxmauro/go-webserver/v2/middleware"
 )
 
 type testApiOutput struct {

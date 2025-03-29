@@ -1,3 +1,5 @@
+// See the LICENSE file for license details.
+
 package middleware
 
 import (
@@ -8,9 +10,9 @@ import (
 	"time"
 
 	"github.com/VictoriaMetrics/fastcache"
-	webserver "github.com/randlabs/go-webserver/v2"
-	"github.com/randlabs/go-webserver/v2/storage"
-	"github.com/randlabs/go-webserver/v2/util"
+	webserver "github.com/mxmauro/go-webserver/v2"
+	"github.com/mxmauro/go-webserver/v2/storage"
+	"github.com/mxmauro/go-webserver/v2/util"
 )
 
 // -----------------------------------------------------------------------------

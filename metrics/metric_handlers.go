@@ -1,11 +1,13 @@
+// See the LICENSE file for license details.
+
 package metrics
 
 import (
 	"strconv"
 
+	webserver "github.com/mxmauro/go-webserver/v2"
+	"github.com/mxmauro/go-webserver/v2/util"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
-	webserver "github.com/randlabs/go-webserver/v2"
-	"github.com/randlabs/go-webserver/v2/util"
 )
 
 // -----------------------------------------------------------------------------

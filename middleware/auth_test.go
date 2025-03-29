@@ -5,9 +5,9 @@ import (
 	"net/http"
 	"testing"
 
-	webserver "github.com/randlabs/go-webserver/v2"
-	"github.com/randlabs/go-webserver/v2/helpers_test"
-	"github.com/randlabs/go-webserver/v2/middleware"
+	webserver "github.com/mxmauro/go-webserver/v2"
+	"github.com/mxmauro/go-webserver/v2/internal/testcommon"
+	"github.com/mxmauro/go-webserver/v2/middleware"
 )
 
 // -----------------------------------------------------------------------------
@@ -16,7 +16,7 @@ func TestMiddlewareAuth(t *testing.T) {
 	var statusCode int
 
 	//Create server
-	srv := helpers_test.RunWebServer(t, func(srv *webserver.Server) error {
+	srv := testcommon.RunWebServer(t, func(srv *webserver.Server) error {
 		// Add some middlewares
 		srv.Use(middleware.NewAuth(middleware.AuthOptions{
 			HeaderName:      "X-Auth",
@@ -31,7 +31,7 @@ func TestMiddlewareAuth(t *testing.T) {
 	defer srv.Stop()
 
 	// Try authorization bearer
-	_, _, err := helpers_test.QueryApiVersion(true, nil, http.Header{
+	_, _, err := testcommon.QueryApiVersion(true, nil, http.Header{
 		"Authorization": []string{"Bearer abc1234"},
 	}, []int{200})
 	if err != nil {
@@ -39,7 +39,7 @@ func TestMiddlewareAuth(t *testing.T) {
 	}
 
 	// Try bad authorization bearer
-	statusCode, _, err = helpers_test.QueryApiVersion(true, nil, http.Header{
+	statusCode, _, err = testcommon.QueryApiVersion(true, nil, http.Header{
 		"Authorization": []string{"Bearer abc1234!!!"},
 	}, []int{401})
 	if err != nil {
@@ -51,7 +51,7 @@ func TestMiddlewareAuth(t *testing.T) {
 	}
 
 	// Try header
-	_, _, err = helpers_test.QueryApiVersion(true, nil, http.Header{
+	_, _, err = testcommon.QueryApiVersion(true, nil, http.Header{
 		"X-Auth": []string{"abc1234"},
 	}, []int{200})
 	if err != nil {
@@ -59,7 +59,7 @@ func TestMiddlewareAuth(t *testing.T) {
 	}
 
 	// Try bad header
-	statusCode, _, err = helpers_test.QueryApiVersion(true, nil, http.Header{
+	statusCode, _, err = testcommon.QueryApiVersion(true, nil, http.Header{
 		"X-Auth": []string{"abc1234!!!"},
 	}, []int{401})
 	if err != nil {
@@ -71,7 +71,7 @@ func TestMiddlewareAuth(t *testing.T) {
 	}
 
 	// Try query parameter
-	_, _, err = helpers_test.QueryApiVersion(true, map[string]string{
+	_, _, err = testcommon.QueryApiVersion(true, map[string]string{
 		"auth": "abc1234",
 	}, nil, []int{200})
 	if err != nil {
@@ -79,7 +79,7 @@ func TestMiddlewareAuth(t *testing.T) {
 	}
 
 	// Try bad query parameter
-	statusCode, _, err = helpers_test.QueryApiVersion(true, map[string]string{
+	statusCode, _, err = testcommon.QueryApiVersion(true, map[string]string{
 		"auth": "abc1234!!!",
 	}, nil, []int{401})
 	if err != nil {
@@ -91,7 +91,7 @@ func TestMiddlewareAuth(t *testing.T) {
 	}
 
 	// Try cookie
-	_, _, err = helpers_test.QueryApiVersion(true, nil, http.Header{
+	_, _, err = testcommon.QueryApiVersion(true, nil, http.Header{
 		"Cookie": []string{"auth=abc1234"},
 	}, []int{200})
 	if err != nil {
@@ -99,7 +99,7 @@ func TestMiddlewareAuth(t *testing.T) {
 	}
 
 	// Try bad cookie
-	statusCode, _, err = helpers_test.QueryApiVersion(true, nil, http.Header{
+	statusCode, _, err = testcommon.QueryApiVersion(true, nil, http.Header{
 		"Cookie": []string{"auth=abc1234!!!"},
 	}, []int{401})
 	if err != nil {

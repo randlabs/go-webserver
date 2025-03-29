@@ -1,3 +1,5 @@
+// See the LICENSE file for license details.
+
 package middleware
 
 import (
@@ -5,7 +7,7 @@ import (
 	"net/http"
 	"runtime"
 
-	webserver "github.com/randlabs/go-webserver/v2"
+	webserver "github.com/mxmauro/go-webserver/v2"
 )
 
 // -----------------------------------------------------------------------------

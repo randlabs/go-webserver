@@ -1,3 +1,5 @@
+// See the LICENSE file for license details.
+
 package go_webserver_test
 
 import (
@@ -10,16 +12,16 @@ import (
 	"testing"
 	"time"
 
-	webserver "github.com/randlabs/go-webserver/v2"
-	"github.com/randlabs/go-webserver/v2/helpers_test"
-	"github.com/randlabs/go-webserver/v2/middleware"
+	webserver "github.com/mxmauro/go-webserver/v2"
+	"github.com/mxmauro/go-webserver/v2/internal/testcommon"
+	"github.com/mxmauro/go-webserver/v2/middleware"
 )
 
 // -----------------------------------------------------------------------------
 
 func TestWebServerStress(t *testing.T) {
 	//Create server
-	srv := helpers_test.RunWebServer(t, func(srv *webserver.Server) error {
+	srv := testcommon.RunWebServer(t, func(srv *webserver.Server) error {
 		// Add some middlewares
 		srv.Use(middleware.DisableClientCache())
 
@@ -40,7 +42,7 @@ func TestWebServerStress(t *testing.T) {
 
 		go func(ctx context.Context) {
 			for {
-				_, _, err := helpers_test.QueryApiVersion(false, nil, nil, []int{200})
+				_, _, err := testcommon.QueryApiVersion(false, nil, nil, []int{200})
 				if err == nil {
 					atomic.AddInt32(&successCounter, 1)
 				} else {

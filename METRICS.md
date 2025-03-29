@@ -9,7 +9,7 @@ import (
 	"encoding/json"
 	"math/rand"
 
-	"github.com/randlabs/go-webserver/v2/metrics"
+	"github.com/mxmauro/go-webserver/v2/metrics"
 )
 
 func main() {

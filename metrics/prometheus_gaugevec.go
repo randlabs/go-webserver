@@ -1,3 +1,5 @@
+// See the LICENSE file for license details.
+
 package metrics
 
 import (
@@ -9,15 +11,15 @@ import (
 // -----------------------------------------------------------------------------
 
 type gaugeVecWithCallbackCollector struct {
-	desc     *prometheus.Desc
-	metrics  []prometheus.Metric
+	desc    *prometheus.Desc
+	metrics []prometheus.Metric
 }
 
 type gaugeVecWithCallbackMetric struct {
-	self        prometheus.Metric
-	desc        *prometheus.Desc
-	labelPairs  []*dto.LabelPair
-	handler     ValueHandler
+	self       prometheus.Metric
+	desc       *prometheus.Desc
+	labelPairs []*dto.LabelPair
+	handler    ValueHandler
 }
 
 // -----------------------------------------------------------------------------

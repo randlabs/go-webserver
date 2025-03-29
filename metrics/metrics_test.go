@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/randlabs/go-webserver/v2/helpers_test"
-	"github.com/randlabs/go-webserver/v2/metrics"
+	"github.com/mxmauro/go-webserver/v2/internal/testcommon"
+	"github.com/mxmauro/go-webserver/v2/metrics"
 )
 
 // -----------------------------------------------------------------------------
@@ -115,7 +115,7 @@ func TestMetricsWebServer(t *testing.T) {
 	}
 
 	// Open default browser
-	helpers_test.OpenBrowser("/metrics")
+	testcommon.OpenBrowser("/metrics")
 
 	// Wait for CTRL+C
 	fmt.Println("Server running. Press CTRL+C to stop.")
